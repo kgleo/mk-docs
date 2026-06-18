@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Docs Manager + Navigation</title>
+    <title>Docs Manager + Proxy</title>
     <style>
         * { box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 1400px; margin: 0 auto; padding: 20px; background: #f5f6f8; }
@@ -35,7 +35,7 @@
         .tree-children { margin-left: 20px; border-left: 2px solid #e9ecf3; padding-left: 8px; }
 
         .token-section { background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-        .token-section input { width: 60%; }
+        .token-section input { width: 50%; }
 
         .status-area { margin-top: 12px; padding: 12px; border-radius: 4px; background: #f0f2f5; }
         .success { color: #00875a; }
@@ -50,7 +50,6 @@
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         #loadingMsg .status-detail { font-size: 13px; color: #6b778c; margin-top: 8px; }
 
-        /* ----- CONNECTION LOG PANEL ----- */
         #logPanel {
             background: #1e1e1e;
             color: #d4d4d4;
@@ -73,15 +72,7 @@
             color: #fff;
             font-weight: 600;
         }
-        #logPanel .log-header button {
-            background: #444;
-            color: #fff;
-            border: none;
-            padding: 2px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 11px;
-        }
+        #logPanel .log-header button { background: #444; color: #fff; border: none; padding: 2px 12px; border-radius: 4px; cursor: pointer; font-size: 11px; }
         #logPanel .log-header button:hover { background: #666; }
         #logMessages { line-height: 1.6; }
         #logMessages .log-time { color: #888; margin-right: 8px; }
@@ -89,13 +80,14 @@
         .log-success { color: #4caf50; }
         .log-error { color: #f44336; }
         .log-warning { color: #ff9800; }
+        .proxy-warning { background: #ff5252; color: #fff; padding: 8px 12px; border-radius: 4px; margin: 8px 0; font-weight: bold; }
 
         @media (max-width: 768px) { .layout { flex-direction: column; } .panel-nav { min-width: unset; } }
     </style>
 </head>
 <body>
 
-<h1>📚 Docs Manager + Navigation</h1>
+<h1>📚 Docs Manager + Network Proxy</h1>
 
 <!-- LOADING OVERLAY -->
 <div id="loadingMsg">
@@ -107,19 +99,24 @@
 <!-- MAIN UI -->
 <div id="mainUI" style="display:none;">
 
-    <!-- TOKEN SECTION -->
+    <!-- TOKEN & PROXY SECTION -->
     <div class="token-section">
         <label><strong>🔑 GitHub Token</strong> (needs <code>repo</code> scope):</label>
         <input type="password" id="token" placeholder="Paste your token here..." style="width:60%;">
         <button onclick="saveToken()" class="outline" style="padding:8px 16px;">💾 Save</button>
         <button onclick="checkConnection()" class="outline" style="background:#17a2b8;color:#fff;border-color:#17a2b8;">📶 Check Connection</button>
         <span id="tokenStatus" style="margin-left:10px;"></span>
-        <br><small>Stored securely in your browser's localStorage.</small>
+        
+        <div style="margin-top: 12px; padding: 10px; background: #e9ecf3; border-radius: 6px;">
+            <input type="checkbox" id="useProxy" style="width: auto; margin-right: 10px;">
+            <label for="useProxy" style="font-weight: bold; cursor: pointer;">🌐 Use CORS Proxy (Bypass network blocks)</label>
+            <br><small style="color: #6b778c;">⚠️ Only use this if you see "Failed to fetch". This sends your requests via a 3rd-party proxy. Use a temporary token.</small>
+        </div>
+        <br><small>Token stored securely in your browser's localStorage.</small>
     </div>
 
     <!-- LAYOUT -->
     <div class="layout">
-        <!-- LEFT: NAVIGATION TREE -->
         <div class="panel panel-nav">
             <h2>📖 Navigation Tree</h2>
             <div class="quick-actions">
@@ -134,7 +131,6 @@
             <div id="navStatus"></div>
         </div>
 
-        <!-- RIGHT: PAGE EDITOR -->
         <div class="panel panel-editor editor-area">
             <h2>✏️ Page Editor</h2>
             <div id="editorContent">
@@ -143,18 +139,16 @@
         </div>
     </div>
 
-    <!-- ===== CONNECTION LOG PANEL ===== -->
+    <!-- LOG PANEL -->
     <div id="logPanel">
         <div class="log-header">
             <span>📋 Connection Log</span>
             <button onclick="clearLog()">Clear</button>
         </div>
         <div id="logMessages">
-            <div><span class="log-time">[System]</span><span class="log-info">Ready. Click "Check Connection" to test GitHub API reachability.</span></div>
+            <div><span class="log-time">[System]</span><span class="log-info">Ready. Check the "Use Proxy" box if API is blocked.</span></div>
         </div>
     </div>
-
-    <div id="status"></div>
 </div>
 
 <script>
@@ -220,7 +214,7 @@
     }
 
     // ============================================================
-    //  LOGGING SYSTEM (Shows all network activity)
+    //  LOGGING SYSTEM
     // ============================================================
     function addLog(msg, type = 'info') {
         const container = document.getElementById('logMessages');
@@ -232,6 +226,20 @@
 
     function clearLog() {
         document.getElementById('logMessages').innerHTML = '<div><span class="log-time">[System]</span><span class="log-info">Log cleared.</span></div>';
+    }
+
+    // ============================================================
+    //  PROXY HELPER - THE NEW MAGIC!
+    // ============================================================
+    function getTargetUrl(originalUrl) {
+        const useProxy = document.getElementById('useProxy').checked;
+        if (useProxy) {
+            // corsproxy.io supports all HTTP methods (GET, POST, PUT, DELETE) and forwards Authorization headers
+            const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(originalUrl);
+            addLog(`🌐 Proxy enabled: ${originalUrl} -> ${proxyUrl}`, 'warning');
+            return proxyUrl;
+        }
+        return originalUrl;
     }
 
     // ============================================================
@@ -258,45 +266,42 @@
     async function checkConnection() {
         addLog('🔍 Testing network connectivity...', 'info');
 
-        // Test 1: Basic internet / GitHub API reachability (no token)
-        try {
-            const resp = await fetch('https://api.github.com/zen');
-            addLog(`📡 GitHub API (zen) → Status: ${resp.status} ${resp.statusText}`, resp.ok ? 'success' : 'error');
-        } catch (e) {
-            addLog(`❌ GitHub API unreachable (DNS/Firewall): ${e.message}`, 'error');
+        const useProxy = document.getElementById('useProxy').checked;
+        if (useProxy) addLog('🌐 Proxy is ENABLED. Requests will go through corsproxy.io.', 'warning');
+
+        const token = document.getElementById('token').value.trim();
+        if (!token) {
+            addLog('⚠️ No token entered. Enter one to test repo access.', 'warning');
+            return;
         }
 
-        // Test 2: Repo access with token
-        const token = document.getElementById('token').value.trim();
-        if (token) {
-            try {
-                const resp = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}`, {
-                    headers: { 'Authorization': `token ${token}` }
-                });
-                addLog(`📡 Repo Access → Status: ${resp.status} ${resp.statusText}`, resp.ok ? 'success' : 'error');
-                if (!resp.ok) {
-                    const txt = await resp.text();
-                    addLog(`❌ Token/Repo error: ${txt.substring(0, 150)}`, 'error');
-                } else {
-                    addLog(`✅ Repo "${REPO_OWNER}/${REPO_NAME}" is accessible.`, 'success');
-                }
-            } catch (e) {
-                addLog(`❌ Repo fetch failed: ${e.message}`, 'error');
+        const url = getTargetUrl(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}`);
+        addLog(`⏳ Testing Repo Access via ${useProxy ? 'Proxy' : 'Direct'}...`, 'info');
+        try {
+            const resp = await fetch(url, { headers: { 'Authorization': `token ${token}` } });
+            addLog(`📡 Status: ${resp.status} ${resp.statusText}`, resp.ok ? 'success' : 'error');
+            if (resp.ok) {
+                addLog(`✅ Repo accessible! You can now save pages.`, 'success');
+            } else {
+                const txt = await resp.text();
+                addLog(`❌ Error: ${txt.substring(0, 150)}`, 'error');
             }
-        } else {
-            addLog('⚠️ No token entered. Please paste your token and save it.', 'warning');
+        } catch (e) {
+            addLog(`❌ FAILED: ${e.message}`, 'error');
+            if (!useProxy) {
+                addLog('💡 Tip: Try checking the "Use CORS Proxy" box and click "Check Connection" again.', 'warning');
+            }
         }
-        addLog('🏁 Connection test finished.', 'info');
     }
 
     // ============================================================
-    //  GITHUB API HELPERS (with full logging)
+    //  GITHUB API HELPERS (UPDATED TO USE getTargetUrl)
     // ============================================================
     const REPO_OWNER = 'kaunghtetminkght-prog';
     const REPO_NAME = 'mk-docs';
 
     async function fetchFile(path, token) {
-        const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${path}`;
+        const url = getTargetUrl(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${path}`);
         addLog(`⏳ GET ${url}`, 'info');
         try {
             const resp = await fetch(url, { headers: { 'Authorization': `token ${token}` } });
@@ -317,15 +322,15 @@
             return { content, sha: data.sha };
         } catch (e) {
             if (e.message.includes('Failed to fetch')) {
-                addLog(`❌ NETWORK ERROR: Cannot reach GitHub API. Check CORS, VPN, or firewall. (${e.message})`, 'error');
-                throw new Error(`Network Error: Cannot connect to GitHub API. Are you online?`);
+                addLog(`❌ NETWORK ERROR. Try enabling the Proxy checkbox.`, 'error');
+                throw new Error(`Network Error: Cannot connect to GitHub API.`);
             }
             throw e;
         }
     }
 
     async function updateFile(path, content, token, sha = null) {
-        const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${path}`;
+        const url = getTargetUrl(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${path}`);
         addLog(`⏳ PUT ${url}`, 'info');
         const payload = {
             message: `Update ${path} via editor`,
@@ -351,15 +356,15 @@
             return await resp.json();
         } catch (e) {
             if (e.message.includes('Failed to fetch')) {
-                addLog(`❌ NETWORK ERROR: Cannot reach GitHub API. (${e.message})`, 'error');
-                throw new Error(`Network Error: Cannot connect to GitHub API. Are you online?`);
+                addLog(`❌ NETWORK ERROR. Try enabling the Proxy checkbox.`, 'error');
+                throw new Error(`Network Error: Cannot connect to GitHub API.`);
             }
             throw e;
         }
     }
 
     async function deleteFile(path, token, sha) {
-        const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${path}`;
+        const url = getTargetUrl(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${path}`);
         addLog(`⏳ DELETE ${url}`, 'info');
         try {
             const resp = await fetch(url, {
@@ -372,7 +377,7 @@
             addLog(`✅ Deleted ${path}`, 'success');
         } catch (e) {
             if (e.message.includes('Failed to fetch')) {
-                addLog(`❌ NETWORK ERROR: Cannot reach GitHub API. (${e.message})`, 'error');
+                addLog(`❌ NETWORK ERROR. Try enabling the Proxy checkbox.`, 'error');
                 throw new Error(`Network Error: Cannot connect to GitHub API.`);
             }
             throw e;
@@ -380,7 +385,7 @@
     }
 
     // ============================================================
-    //  NAVIGATION PARSING & UI (rest of the logic)
+    //  NAVIGATION PARSING & UI (Full logic - same as before)
     // ============================================================
     let navData = [];
     let selectedPath = null;
@@ -417,7 +422,7 @@
         const token = getToken();
         if (!token) return [];
         try {
-            const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/docs`;
+            const url = getTargetUrl(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/docs`);
             addLog(`⏳ Scanning docs/ folder...`, 'info');
             const resp = await fetch(url, { headers: { 'Authorization': `token ${token}` } });
             if (!resp.ok) return [];
@@ -436,9 +441,6 @@
         }
     }
 
-    // ============================================================
-    //  RENDER TREE (unchanged from previous, but calls addLog)
-    // ============================================================
     function renderTree(nav) {
         const container = document.getElementById('treeContainer');
         if (!nav || nav.length === 0) {
@@ -565,9 +567,6 @@
         return result;
     }
 
-    // ============================================================
-    //  NAVIGATION OPERATIONS
-    // ============================================================
     function addNewPage() {
         const name = prompt('Enter page title:');
         if (!name) return;
@@ -626,9 +625,6 @@
         addLog(`🗑️ Removed "${item.title}" from navigation.`, 'warning');
     }
 
-    // ============================================================
-    //  EDIT PAGE
-    // ============================================================
     async function editPage(path) {
         const token = getToken();
         if (!token) return;
@@ -713,9 +709,6 @@
         }
     }
 
-    // ============================================================
-    //  SAVE NAVIGATION TO GITHUB
-    // ============================================================
     async function saveNavigation() {
         const token = getToken();
         if (!token) return;
@@ -782,9 +775,6 @@
         return newLines.join('\n');
     }
 
-    // ============================================================
-    //  LOAD NAVIGATION
-    // ============================================================
     async function loadNavigation() {
         const token = getToken();
         if (!token) return;
@@ -827,25 +817,22 @@
             await loadAllDependencies();
             loadingEl.style.display = 'none';
             document.getElementById('mainUI').style.display = 'block';
-            addLog('🚀 Editor initialized. Enter your token and click "Check Connection".', 'info');
+            addLog('🚀 Editor initialized.', 'info');
+            addLog('⚠️ If GitHub API is blocked, CHECK the "Use CORS Proxy" box.', 'warning');
+            
             const savedToken = localStorage.getItem('github_token');
             if (savedToken) {
                 document.getElementById('token').value = savedToken;
                 document.getElementById('tokenStatus').innerHTML = '✅ Loaded.';
-                addLog('🔑 Token loaded from localStorage. Auto-refreshing...', 'info');
-                setTimeout(loadNavigation, 300);
+                addLog('🔑 Token loaded. Click "Check Connection" to test.', 'info');
             } else {
                 addLog('⚠️ No token found. Please paste your GitHub token.', 'warning');
             }
         } catch (e) {
             loadingEl.innerHTML = `
                 <p style="color:#de350b; font-size:18px;">❌ Failed to load required libraries.</p>
-                <p style="color:#6b778c;">Please check your network connection or try a different browser.</p>
+                <p style="color:#6b778c;">Please check your network connection.</p>
                 <p style="color:#6b778c; font-size:13px; word-break:break-all;">Error: ${e.message}</p>
-                <p style="margin-top:20px;">💡 Try using a VPN or contact your network admin to allow:<br>
-                <code style="background:#f0f2f5;padding:4px 8px;border-radius:4px;">cdn.jsdelivr.net</code>,
-                <code style="background:#f0f2f5;padding:4px 8px;border-radius:4px;">unpkg.com</code>,
-                <code style="background:#f0f2f5;padding:4px 8px;border-radius:4px;">cdnjs.cloudflare.com</code></p>
             `;
         }
     };
