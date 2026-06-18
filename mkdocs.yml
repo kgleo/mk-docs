@@ -1,4 +1,42 @@
-site_name: My Documentation
+site_name: My Space          # This acts like your Confluence "Space Name"
 site_url: https://kaunghtetminkght-prog.github.io/mk-docs/
+
 theme:
   name: material
+  palette:
+    - scheme: default
+      primary: white         # Clean white header like Confluence
+      accent: blue           # Atlassian blue highlights
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: blue
+      accent: light-blue
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+  font:
+    text: Inter              # Clean, modern font (similar to Confluence)
+    code: JetBrains Mono
+
+  features:
+    - navigation.sections    # Sidebar sections look like Confluence page tree
+    - navigation.expand      # Expands tree by default
+    - navigation.top         # Back to top button
+    - navigation.indexes     # Makes index.md pages clickable in sidebar
+    - toc.integrate          # ✅ Moves the Table of Contents to the LEFT sidebar (just like Confluence's page tree)
+    - search.suggest
+    - search.highlight
+
+extra_css:
+  - stylesheets/extra.css   # We will create this next
+
+extra:
+  generator: false           # Removes "Made with Material"
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/kaunghtetminkght-prog
+
+copyright: '© 2026 KaungHtetMin'
