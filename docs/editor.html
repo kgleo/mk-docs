@@ -2,9 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Docs Editor + Navigation Manager</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
+    <title>Docs Manager + Navigation</title>
     <style>
         * { box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 1400px; margin: 0 auto; padding: 20px; background: #f5f6f8; }
@@ -34,22 +32,23 @@
         .tree-item .actions button { padding: 2px 8px; font-size: 12px; background: transparent; color: #6b778c; border: none; cursor: pointer; }
         .tree-item .actions button:hover { background: #e9ecf3; border-radius: 4px; color: #172b4d; }
         .tree-item.group { border-left-color: #0052cc; background: #f8f9fa; font-weight: 500; }
-        .tree-item .child-indent { margin-left: 24px; width: 100%; }
         .tree-children { margin-left: 20px; border-left: 2px solid #e9ecf3; padding-left: 8px; }
 
         .token-section { background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
         .token-section input { width: 60%; }
 
-        #status { margin-top: 12px; padding: 12px; border-radius: 4px; background: #f0f2f5; }
+        #status, #navStatus, #editStatus { margin-top: 12px; padding: 12px; border-radius: 4px; background: #f0f2f5; }
         .success { color: #00875a; }
         .error { color: #de350b; }
 
         .editor-area textarea { height: 200px; font-family: 'Courier New', monospace; font-size: 13px; }
-        .editor-area input { margin: 4px 0; }
-
         .drag-handle { cursor: grab; color: #6b778c; font-size: 14px; user-select: none; }
-
         .quick-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+
+        #loadingMsg { padding: 40px 20px; text-align: center; font-size: 16px; color: #172b4d; }
+        #loadingMsg .spinner { display: inline-block; animation: spin 1s linear infinite; font-size: 28px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #loadingMsg .status-detail { font-size: 13px; color: #6b778c; margin-top: 8px; }
 
         @media (max-width: 768px) { .layout { flex-direction: column; } .panel-nav { min-width: unset; } }
     </style>
@@ -58,54 +57,160 @@
 
 <h1>📚 Docs Manager + Navigation</h1>
 
-<!-- ===== TOKEN SECTION ===== -->
-<div class="token-section">
-    <label><strong>🔑 GitHub Token</strong> (needs <code>repo</code> scope):</label>
-    <input type="password" id="token" placeholder="Paste your token here..." style="width:70%;">
-    <button onclick="saveToken()" class="outline" style="padding:8px 16px;">💾 Save</button>
-    <span id="tokenStatus" style="margin-left:10px;"></span>
-    <br><small>Stored securely in your browser's localStorage.</small>
+<!-- LOADING OVERLAY -->
+<div id="loadingMsg">
+    <div class="spinner">⚙️</div>
+    <p>Loading editor libraries...</p>
+    <div class="status-detail" id="loadStatus">Initializing...</div>
 </div>
 
-<!-- ===== LAYOUT ===== -->
-<div class="layout">
-    <!-- LEFT: NAVIGATION TREE -->
-    <div class="panel panel-nav">
-        <h2>📖 Navigation Tree</h2>
-        <div class="quick-actions">
-            <button onclick="loadNavigation()" class="outline">🔄 Refresh</button>
-            <button onclick="addNewPage()" class="success">➕ New Page</button>
-            <button onclick="addNewGroup()" class="outline">📁 New Group</button>
-            <button onclick="saveNavigation()" style="background:#36b37e;">💾 Save Nav to GitHub</button>
-        </div>
-        <div id="treeContainer" style="margin-top:12px; min-height:200px; border: 1px dashed #ddd; padding: 12px; border-radius: 8px;">
-            <p style="color:#6b778c; text-align:center;">Load your navigation to see pages here.</p>
-        </div>
-        <div id="navStatus"></div>
+<!-- MAIN UI (hidden until libraries load) -->
+<div id="mainUI" style="display:none;">
+    <!-- TOKEN SECTION -->
+    <div class="token-section">
+        <label><strong>🔑 GitHub Token</strong> (needs <code>repo</code> scope):</label>
+        <input type="password" id="token" placeholder="Paste your token here..." style="width:70%;">
+        <button onclick="saveToken()" class="outline" style="padding:8px 16px;">💾 Save</button>
+        <span id="tokenStatus" style="margin-left:10px;"></span>
+        <br><small>Stored securely in your browser's localStorage.</small>
     </div>
 
-    <!-- RIGHT: PAGE EDITOR -->
-    <div class="panel panel-editor editor-area">
-        <h2>✏️ Page Editor</h2>
-        <div id="editorContent">
-            <p style="color:#6b778c;">Select a page from the tree to edit.</p>
+    <!-- LAYOUT -->
+    <div class="layout">
+        <!-- LEFT: NAVIGATION TREE -->
+        <div class="panel panel-nav">
+            <h2>📖 Navigation Tree</h2>
+            <div class="quick-actions">
+                <button onclick="loadNavigation()" class="outline">🔄 Refresh</button>
+                <button onclick="addNewPage()" class="success">➕ New Page</button>
+                <button onclick="addNewGroup()" class="outline">📁 New Group</button>
+                <button onclick="saveNavigation()" style="background:#36b37e;">💾 Save Nav to GitHub</button>
+            </div>
+            <div id="treeContainer" style="margin-top:12px; min-height:200px; border: 1px dashed #ddd; padding: 12px; border-radius: 8px;">
+                <p style="color:#6b778c; text-align:center;">Load your navigation to see pages here.</p>
+            </div>
+            <div id="navStatus"></div>
+        </div>
+
+        <!-- RIGHT: PAGE EDITOR -->
+        <div class="panel panel-editor editor-area">
+            <h2>✏️ Page Editor</h2>
+            <div id="editorContent">
+                <p style="color:#6b778c;">Select a page from the tree to edit.</p>
+            </div>
         </div>
     </div>
+    <div id="status"></div>
 </div>
-
-<!-- ===== STATUS BAR ===== -->
-<div id="status"></div>
 
 <script>
     // ============================================================
-    //  TOKEN MANAGEMENT
+    //  TRIPLE CDN FALLBACK LOADER
+    //  Tries: jsDelivr → unpkg → cdnjs
     // ============================================================
-    const savedToken = localStorage.getItem('github_token');
-    if (savedToken) {
-        document.getElementById('token').value = savedToken;
-        document.getElementById('tokenStatus').innerHTML = '✅ Loaded.';
+    function loadScript(sources) {
+        return new Promise((resolve, reject) => {
+            let currentIndex = 0;
+
+            function tryLoad() {
+                if (currentIndex >= sources.length) {
+                    reject(new Error(`Failed to load from all sources: ${sources.join(', ')}`));
+                    return;
+                }
+                const src = sources[currentIndex];
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = () => {
+                    console.log(`✅ Loaded: ${src}`);
+                    resolve();
+                };
+                script.onerror = () => {
+                    console.warn(`⚠️ Failed to load ${src}, trying next fallback...`);
+                    document.getElementById('loadStatus').innerHTML = `Trying fallback ${currentIndex + 2}...`;
+                    currentIndex++;
+                    tryLoad();
+                };
+                document.head.appendChild(script);
+            }
+            tryLoad();
+        });
     }
 
+    async function loadAllDependencies() {
+        const deps = [
+            {
+                name: 'JSZip',
+                sources: [
+                    'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js',
+                    'https://unpkg.com/jszip@3.10.1/dist/jszip.min.js',
+                    'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
+                ]
+            },
+            {
+                name: 'SortableJS',
+                sources: [
+                    'https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js',
+                    'https://unpkg.com/sortablejs@1.15.2/Sortable.min.js',
+                    'https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js'
+                ]
+            },
+            {
+                name: 'js-yaml',
+                sources: [
+                    'https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js',
+                    'https://unpkg.com/js-yaml@4.1.0/dist/js-yaml.min.js',
+                    'https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js'
+                ]
+            }
+        ];
+
+        for (const dep of deps) {
+            document.getElementById('loadStatus').innerHTML = `Loading ${dep.name}...`;
+            try {
+                await loadScript(dep.sources);
+            } catch (e) {
+                console.error(`❌ ${e.message}`);
+                throw e;
+            }
+        }
+        document.getElementById('loadStatus').innerHTML = '✅ All libraries loaded!';
+    }
+
+    // ============================================================
+    //  INIT – Show UI only after libraries are ready
+    // ============================================================
+    window.onload = async function() {
+        const loadingEl = document.getElementById('loadingMsg');
+        try {
+            await loadAllDependencies();
+            // Hide loading, show main UI
+            loadingEl.style.display = 'none';
+            document.getElementById('mainUI').style.display = 'block';
+
+            // Load token and auto-refresh
+            const savedToken = localStorage.getItem('github_token');
+            if (savedToken) {
+                document.getElementById('token').value = savedToken;
+                document.getElementById('tokenStatus').innerHTML = '✅ Loaded.';
+                setTimeout(loadNavigation, 300);
+            }
+        } catch (e) {
+            loadingEl.innerHTML = `
+                <p style="color:#de350b; font-size:18px;">❌ Failed to load required libraries.</p>
+                <p style="color:#6b778c;">Please check your network connection or try a different browser.</p>
+                <p style="color:#6b778c; font-size:13px;">All CDNs (jsDelivr, unpkg, cdnjs) appear to be blocked or unreachable.</p>
+                <p style="color:#6b778c; font-size:13px; word-break:break-all;">Error: ${e.message}</p>
+                <p style="margin-top:20px;">💡 Try using a VPN or contact your network admin to allow:<br>
+                <code style="background:#f0f2f5;padding:4px 8px;border-radius:4px;">cdn.jsdelivr.net</code>,
+                <code style="background:#f0f2f5;padding:4px 8px;border-radius:4px;">unpkg.com</code>,
+                <code style="background:#f0f2f5;padding:4px 8px;border-radius:4px;">cdnjs.cloudflare.com</code></p>
+            `;
+        }
+    };
+
+    // ============================================================
+    //  TOKEN MANAGEMENT
+    // ============================================================
     function saveToken() {
         const token = document.getElementById('token').value.trim();
         if (token) { localStorage.setItem('github_token', token);
@@ -130,7 +235,7 @@
         const resp = await fetch(url, { headers: { 'Authorization': `token ${token}` } });
         if (!resp.ok) {
             if (resp.status === 404) return null;
-            throw new Error(`HTTP ${resp.status}`);
+            throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
         }
         const data = await resp.json();
         const content = atob(data.content);
@@ -153,13 +258,9 @@
         });
         if (!resp.ok) {
             const err = await resp.json();
-            throw new Error(err.message || 'Update failed');
+            throw new Error(`HTTP ${resp.status}: ${err.message || resp.statusText}`);
         }
         return await resp.json();
-    }
-
-    async function createFile(path, content, token) {
-        return await updateFile(path, content, token);
     }
 
     async function deleteFile(path, token, sha) {
@@ -169,125 +270,50 @@
             headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ message: `Delete ${path}`, sha, branch: 'main' })
         });
-        if (!resp.ok) throw new Error('Delete failed');
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
     }
 
     // ============================================================
-    //  NAVIGATION PARSING & BUILDING
+    //  NAVIGATION PARSING
     // ============================================================
-    let navData = [];       // Array of { title, path, children?, isGroup? }
+    let navData = [];
     let selectedPath = null;
     let currentFileSha = null;
 
     function parseNavYaml(yamlContent) {
-        // Find the nav: section
         const lines = yamlContent.split('\n');
         let inNav = false;
         let navLines = [];
-        let indentStack = [];
-        let currentLevel = 0;
-
         for (let line of lines) {
-            if (line.trim() === '' || line.trim().startsWith('#')) {
-                if (inNav) navLines.push(line);
-                continue;
-            }
             if (!inNav && line.trim().startsWith('nav:')) {
                 inNav = true;
                 navLines.push(line);
                 continue;
             }
             if (inNav) {
-                // Check if we've exited nav (a non-indented line not starting with space or -)
-                const trimmed = line.trim();
-                if (trimmed && !line.startsWith(' ') && !line.startsWith('\t') && !trimmed.startsWith('#') && !trimmed.startsWith('-')) {
+                if (line.trim() === '' || line.trim().startsWith('#')) {
+                    navLines.push(line);
+                    continue;
+                }
+                if (line.trim() !== '' && !line.startsWith(' ') && !line.startsWith('\t')) {
                     inNav = false;
                     continue;
                 }
                 navLines.push(line);
             }
         }
-
-        if (navLines.length === 0) {
-            // Try to build from file list
-            return buildNavFromFiles(yamlContent);
-        }
-
-        // Parse navLines into a tree
+        if (navLines.length === 0) return null;
         const navYaml = navLines.join('\n');
         try {
             const parsed = jsyaml.load(navYaml);
             return parsed.nav || [];
         } catch (e) {
-            return buildNavFromFiles(yamlContent);
+            console.error('YAML parse error:', e);
+            return null;
         }
     }
 
-    // Simple JS-YAML implementation (minimal)
-    // Since we can't load a full YAML library easily, we'll use a simple recursive parser
-    function parseSimpleNav(lines, startIdx) {
-        const result = [];
-        let i = startIdx;
-        while (i < lines.length) {
-            const line = lines[i];
-            if (line.trim() === '' || line.trim().startsWith('#')) { i++; continue; }
-            const indent = line.search(/\S/);
-            if (indent === 0 && line.trim().startsWith('-')) {
-                // Top-level item
-                const item = parseNavItem(lines, i);
-                result.push(item.node);
-                i = item.nextIdx;
-            } else if (indent === 0 && line.trim() !== '' && !line.trim().startsWith('-')) {
-                // Not a nav item - end
-                break;
-            } else {
-                i++;
-            }
-        }
-        return { nodes: result, nextIdx: i };
-    }
-
-    function parseNavItem(lines, idx) {
-        const line = lines[idx].trim();
-        const isGroup = line.includes(':') && !line.includes('.md') && !line.includes('/');
-        let node = { title: '', path: null, children: [], isGroup: false };
-
-        if (isGroup) {
-            const parts = line.split(':');
-            node.title = parts[0].replace('-', '').trim();
-            node.isGroup = true;
-            node.path = null;
-            // Find children (indented)
-            const baseIndent = lines[idx].search(/\S/);
-            const children = [];
-            let i = idx + 1;
-            while (i < lines.length) {
-                const childLine = lines[i];
-                if (childLine.trim() === '' || childLine.trim().startsWith('#')) { i++; continue; }
-                const childIndent = childLine.search(/\S/);
-                if (childIndent <= baseIndent) break;
-                if (childLine.trim().startsWith('-')) {
-                    const childResult = parseNavItem(lines, i);
-                    children.push(childResult.node);
-                    i = childResult.nextIdx;
-                } else {
-                    i++;
-                }
-            }
-            node.children = children;
-            return { node, nextIdx: i };
-        } else {
-            // Simple page: - Title: path.md
-            const parts = line.replace('-', '').trim().split(':');
-            node.title = parts[0].trim();
-            node.path = parts.slice(1).join(':').trim();
-            node.isGroup = false;
-            return { node, nextIdx: idx + 1 };
-        }
-    }
-
-    // Fallback: build nav from files in docs/
-    async function buildNavFromFiles(yamlContent) {
+    async function buildNavFromFiles() {
         const token = getToken();
         if (!token) return [];
         try {
@@ -302,7 +328,10 @@
                 nav.push({ title: name.charAt(0).toUpperCase() + name.slice(1), path: f.name });
             }
             return nav;
-        } catch (e) { return []; }
+        } catch (e) {
+            console.error('Build nav from files error:', e);
+            return [];
+        }
     }
 
     // ============================================================
@@ -328,18 +357,17 @@
         container.innerHTML = '';
         container.appendChild(list);
 
-        // Enable Sortable
         Sortable.create(list, {
             handle: '.drag-handle',
             animation: 150,
-            onEnd: function(evt) {
-                // Rebuild navData from DOM
+            onEnd: function() {
                 rebuildNavFromDOM();
+                document.getElementById('navStatus').innerHTML = '⚠️ Unsaved changes. Click "Save Nav to GitHub".';
             }
         });
     }
 
-    function createTreeItem(item, parent = null) {
+    function createTreeItem(item) {
         const li = document.createElement('li');
         li.style.margin = '2px 0';
         li.dataset.path = item.path || '';
@@ -348,26 +376,22 @@
         div.className = 'tree-item' + (item.isGroup ? ' group' : '');
         div.draggable = false;
 
-        // Drag handle
         const handle = document.createElement('span');
         handle.className = 'drag-handle';
         handle.textContent = '⠿';
         handle.style.marginRight = '8px';
         div.appendChild(handle);
 
-        // Icon
         const icon = document.createElement('span');
         icon.className = 'icon';
         icon.textContent = item.isGroup ? '📁' : '📄';
         div.appendChild(icon);
 
-        // Name
         const name = document.createElement('span');
         name.className = 'name';
         name.textContent = item.title || (item.path ? item.path.replace('.md', '') : 'Untitled');
         div.appendChild(name);
 
-        // Badge
         if (item.path) {
             const badge = document.createElement('span');
             badge.className = 'badge';
@@ -375,7 +399,6 @@
             div.appendChild(badge);
         }
 
-        // Actions
         const actions = document.createElement('span');
         actions.className = 'actions';
 
@@ -402,21 +425,16 @@
 
         div.appendChild(actions);
 
-        // Click to select/edit
         div.onclick = () => {
             if (item.path) editPage(item.path);
             else if (item.isGroup) {
-                // Toggle children visibility
-                const childrenUl = li.querySelector('ul');
-                if (childrenUl) {
-                    childrenUl.style.display = childrenUl.style.display === 'none' ? 'block' : 'none';
-                }
+                const childUl = li.querySelector('ul');
+                if (childUl) childUl.style.display = childUl.style.display === 'none' ? 'block' : 'none';
             }
         };
 
         li.appendChild(div);
 
-        // Children (for groups)
         if (item.children && item.children.length > 0) {
             const childUl = document.createElement('ul');
             childUl.style.listStyle = 'none';
@@ -425,7 +443,7 @@
             childUl.style.borderLeft = '2px solid #e9ecf3';
             childUl.style.paddingLeft = '8px';
             for (const child of item.children) {
-                const childLi = createTreeItem(child, item);
+                const childLi = createTreeItem(child);
                 childUl.appendChild(childLi);
             }
             li.appendChild(childUl);
@@ -434,9 +452,6 @@
         return li;
     }
 
-    // ============================================================
-    //  NAVIGATION OPERATIONS
-    // ============================================================
     function rebuildNavFromDOM() {
         const container = document.getElementById('treeContainer');
         const rootList = container.querySelector('ul');
@@ -476,11 +491,14 @@
         return result;
     }
 
+    // ============================================================
+    //  NAVIGATION OPERATIONS
+    // ============================================================
     function addNewPage() {
         const name = prompt('Enter page title:');
         if (!name) return;
         const path = name.toLowerCase().replace(/\s+/g, '-') + '.md';
-        navData.push({ title: name, path: path, isGroup: false });
+        navData.push({ title: name, path: path, isGroup: false, children: [] });
         renderTree(navData);
         document.getElementById('navStatus').innerHTML = '⚠️ Unsaved changes. Click "Save Nav to GitHub".';
     }
@@ -497,9 +515,8 @@
         const name = prompt('Enter new page title:');
         if (!name) return;
         const path = name.toLowerCase().replace(/\s+/g, '-') + '.md';
-        const newPage = { title: name, path: path, isGroup: false };
+        const newPage = { title: name, path: path, isGroup: false, children: [] };
 
-        // Find the index of the item in navData and insert after
         const findAndInsert = (arr, target, newItem) => {
             for (let i = 0; i < arr.length; i++) {
                 if (arr[i].title === target.title && arr[i].path === target.path) {
@@ -513,15 +530,13 @@
             return false;
         };
 
-        if (!findAndInsert(navData, item, newPage)) {
-            navData.push(newPage);
-        }
+        if (!findAndInsert(navData, item, newPage)) navData.push(newPage);
         renderTree(navData);
         document.getElementById('navStatus').innerHTML = '⚠️ Unsaved changes. Click "Save Nav to GitHub".';
     }
 
     function deletePage(item) {
-        if (!confirm(`Delete "${item.title}"? This removes it from navigation but does NOT delete the .md file.`)) return;
+        if (!confirm(`Remove "${item.title}" from navigation? (File will NOT be deleted)`)) return;
         const removeFrom = (arr, target) => {
             for (let i = 0; i < arr.length; i++) {
                 if (arr[i].title === target.title && arr[i].path === target.path) {
@@ -540,7 +555,7 @@
     }
 
     // ============================================================
-    //  EDIT PAGE (Load content into editor)
+    //  EDIT PAGE
     // ============================================================
     async function editPage(path) {
         const token = getToken();
@@ -583,16 +598,10 @@
             return;
         }
 
-        // Update the page title in navData if needed
         const updateTitle = (arr, path, newTitle) => {
             for (const item of arr) {
-                if (item.path === path) {
-                    item.title = newTitle;
-                    return true;
-                }
-                if (item.children) {
-                    if (updateTitle(item.children, path, newTitle)) return true;
-                }
+                if (item.path === path) { item.title = newTitle; return true; }
+                if (item.children) { if (updateTitle(item.children, path, newTitle)) return true; }
             }
             return false;
         };
@@ -600,8 +609,7 @@
 
         try {
             await updateFile(`docs/${selectedPath}`, content, token, currentFileSha);
-            statusDiv.innerHTML = '<span class="success">✅ Page saved! Rebuilding site...</span>';
-            // Also save nav changes
+            statusDiv.innerHTML = '<span class="success">✅ Page saved!</span>';
             await saveNavigation();
             renderTree(navData);
         } catch (e) {
@@ -616,23 +624,17 @@
 
         try {
             await deleteFile(`docs/${selectedPath}`, token, currentFileSha);
-            // Remove from nav
             const removeFrom = (arr, path) => {
                 for (let i = 0; i < arr.length; i++) {
-                    if (arr[i].path === path) {
-                        arr.splice(i, 1);
-                        return true;
-                    }
-                    if (arr[i].children) {
-                        if (removeFrom(arr[i].children, path)) return true;
-                    }
+                    if (arr[i].path === path) { arr.splice(i, 1); return true; }
+                    if (arr[i].children) { if (removeFrom(arr[i].children, path)) return true; }
                 }
                 return false;
             };
             removeFrom(navData, selectedPath);
             await saveNavigation();
             renderTree(navData);
-            document.getElementById('editorContent').innerHTML = '<p>✅ Deleted. Refresh the tree.</p>';
+            document.getElementById('editorContent').innerHTML = '<p>✅ Deleted.</p>';
         } catch (e) {
             alert('Error deleting: ' + e.message);
         }
@@ -649,17 +651,14 @@
         statusDiv.innerHTML = '⏳ Saving navigation...';
 
         try {
-            // Build nav YAML from navData
             const navYaml = buildNavYaml(navData);
-            const fullYaml = await getFullMkdocsYaml(navYaml);
+            const fullYaml = await getFullMkdocsYaml(navYaml, token);
 
-            // Fetch current mkdocs.yml to get SHA
             const current = await fetchFile('mkdocs.yml', token);
             const sha = current ? current.sha : null;
 
             await updateFile('mkdocs.yml', fullYaml, token, sha);
             statusDiv.innerHTML = '<span class="success">✅ Navigation saved! Rebuilding site...</span>';
-            document.getElementById('navStatus').innerHTML = '✅ Saved!';
         } catch (e) {
             statusDiv.innerHTML = `<span class="error">❌ Error: ${e.message}</span>`;
         }
@@ -682,43 +681,43 @@
         return result;
     }
 
-    async function getFullMkdocsYaml(navYaml) {
-        const token = getToken();
+    async function getFullMkdocsYaml(navYaml, token) {
         const current = await fetchFile('mkdocs.yml', token);
         let content = current ? current.content : '';
 
-        // Replace or add nav section
-        const navRegex = /^nav:.*$/m;
-        if (navRegex.test(content)) {
-            // Replace existing nav
-            const lines = content.split('\n');
-            let inNav = false;
-            let newLines = [];
-            for (const line of lines) {
-                if (!inNav && line.trim() === '') { newLines.push(line); continue; }
-                if (!inNav && line.trim().startsWith('nav:')) {
-                    inNav = true;
-                    newLines.push('nav:');
+        const lines = content.split('\n');
+        let inNav = false;
+        let newLines = [];
+        let foundNav = false;
+
+        for (const line of lines) {
+            if (!inNav && line.trim().startsWith('nav:')) {
+                inNav = true;
+                foundNav = true;
+                newLines.push('nav:');
+                continue;
+            }
+            if (inNav) {
+                if (line.trim() === '' || line.startsWith(' ') || line.startsWith('\t')) {
                     continue;
-                }
-                if (inNav) {
-                    if (line.trim() === '' || line.startsWith(' ')) continue;
-                    if (line.trim() !== '' && !line.startsWith(' ')) {
-                        inNav = false;
-                        newLines.push(line);
-                    }
                 } else {
+                    inNav = false;
                     newLines.push(line);
                 }
+            } else {
+                newLines.push(line);
             }
-            // Add new nav
-            newLines.push('nav:');
-            newLines.push(navYaml);
-            return newLines.join('\n');
-        } else {
-            // Append nav at the end
-            return content + '\n\nnav:\n' + navYaml;
         }
+
+        if (!foundNav) {
+            if (newLines.length > 0 && newLines[newLines.length - 1].trim() !== '') {
+                newLines.push('');
+            }
+            newLines.push('nav:');
+        }
+        newLines.push(navYaml);
+
+        return newLines.join('\n');
     }
 
     // ============================================================
@@ -738,32 +737,22 @@
                 return;
             }
 
-            // Parse nav from YAML
             const parsed = parseNavYaml(result.content);
             if (parsed && parsed.length > 0) {
                 navData = parsed;
+                statusDiv.innerHTML = `<span class="success">✅ Loaded ${navData.length} items from nav.</span>`;
             } else {
-                // Fallback: scan docs folder
-                const files = await buildNavFromFiles(result.content);
+                statusDiv.innerHTML = '⚠️ No nav found, scanning docs/ folder...';
+                const files = await buildNavFromFiles();
                 navData = files;
+                statusDiv.innerHTML = `<span class="success">✅ Loaded ${navData.length} files from docs/.</span>`;
             }
 
             renderTree(navData);
-            statusDiv.innerHTML = `<span class="success">✅ Loaded ${navData.length} pages.</span>`;
         } catch (e) {
             statusDiv.innerHTML = `<span class="error">❌ Error: ${e.message}</span>`;
         }
     }
-
-    // ============================================================
-    //  INIT
-    // ============================================================
-    // Load automatically on page load
-    window.onload = function() {
-        if (savedToken) {
-            setTimeout(loadNavigation, 500);
-        }
-    };
 </script>
 </body>
 </html>
