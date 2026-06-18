@@ -2,31 +2,50 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Docs Editor</title>
+    <title>Docs Editor + Batch Upload</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; background: #f5f5f5; }
+        body { font-family: Arial, sans-serif; max-width: 900px; margin: 30px auto; padding: 20px; background: #f5f5f5; }
         input, textarea { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
-        textarea { height: 400px; font-family: monospace; }
-        button { background: #28a745; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        textarea { height: 300px; font-family: monospace; }
+        button { background: #28a745; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin-top: 10px; }
         button:hover { background: #218838; }
+        button.danger { background: #dc3545; }
+        button.danger:hover { background: #c82333; }
         #status { margin-top: 15px; padding: 10px; border-radius: 4px; background: #fff; }
         .success { color: green; }
         .error { color: red; }
         .token-input { background: #fff3cd; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
         .token-input label { font-weight: bold; }
+        hr { margin: 30px 0; border: 1px solid #ddd; }
+        .upload-section { background: #e9ecef; padding: 20px; border-radius: 8px; }
+        .upload-section label { display: inline-block; margin-top: 10px; font-weight: bold; }
+        .upload-section input[type="file"] { display: block; margin: 5px 0 15px 0; }
+        .checkbox-group { margin: 10px 0; }
+        .checkbox-group label { font-weight: normal; margin-left: 5px; }
+        #uploadLog { background: #1e1e1e; color: #d4d4d4; padding: 15px; max-height: 400px; overflow-y: auto; border-radius: 4px; font-family: monospace; font-size: 13px; white-space: pre-wrap; word-break: break-all; margin-top: 15px; }
+        .log-success { color: #4caf50; }
+        .log-error { color: #f44336; }
+        .log-info { color: #64b5f6; }
+        .flex-row { display: flex; gap: 20px; flex-wrap: wrap; align-items: center; }
     </style>
 </head>
 <body>
-    <h1>📝 Create / Edit Docs Page</h1>
+    <h1>📝 Docs Manager</h1>
 
+    <!-- Token Section -->
     <div class="token-input">
-        <label for="token">GitHub Personal Access Token (needs `repo` scope):</label>
-        <input type="password" id="token" placeholder="Enter your token here..." style="margin-top:5px;">
-        <small style="display:block;margin-top:5px;">This is stored only in your browser's localStorage for convenience.</small>
-        <button onclick="saveToken()" style="background:#6c757d;padding:6px 12px;font-size:14px;margin-top:5px;">Save Token</button>
-        <span id="tokenStatus" style="margin-left:10px;"></span>
+        <label for="token">🔑 GitHub Personal Access Token (needs <code>repo</code> scope):</label>
+        <input type="password" id="token" placeholder="Paste your token here...">
+        <div style="margin-top:8px;">
+            <button onclick="saveToken()" style="background:#6c757d;padding:6px 18px;font-size:14px;">💾 Save Token</button>
+            <span id="tokenStatus" style="margin-left:15px;"></span>
+        </div>
+        <small>Token is stored securely in your browser's localStorage.</small>
     </div>
 
+    <!-- Single File Editor -->
+    <h2>✏️ Create / Edit Single Page</h2>
     <label for="path">Folder (default: docs/):</label>
     <input type="text" id="path" value="docs/" placeholder="e.g., docs/ or guides/">
 
@@ -36,11 +55,39 @@
     <label for="content">Markdown Content:</label>
     <textarea id="content" placeholder="Write your Markdown here..."></textarea>
 
-    <button onclick="savePage()">💾 Save to GitHub</button>
+    <button onclick="savePage()">💾 Save Single File</button>
     <div id="status"></div>
 
+    <hr>
+
+    <!-- Batch Upload Section -->
+    <div class="upload-section">
+        <h2>📁 Batch Upload (Folders / ZIP)</h2>
+        <p><small>Upload multiple files at once. Images, PDFs, and Markdown all supported.</small></p>
+
+        <div class="flex-row">
+            <div style="flex:1;">
+                <label>📂 Select Folder:</label>
+                <input type="file" id="folderInput" webkitdirectory multiple>
+            </div>
+            <div style="flex:1;">
+                <label>🗜️ Select ZIP File:</label>
+                <input type="file" id="zipInput" accept=".zip">
+            </div>
+        </div>
+
+        <div class="checkbox-group">
+            <input type="checkbox" id="stripRootFolder" checked>
+            <label for="stripRootFolder">Strip the top-level folder name from paths (e.g., <code>myzip/docs/index.md</code> → <code>docs/index.md</code>)</label>
+        </div>
+
+        <button onclick="handleBatchUpload()" style="background:#17a2b8;">🚀 Upload All to docs/</button>
+
+        <div id="uploadLog">📋 Ready for upload...</div>
+    </div>
+
     <script>
-        // Load saved token from localStorage
+        // =============== TOKEN MANAGEMENT ===============
         const savedToken = localStorage.getItem('github_token');
         if (savedToken) {
             document.getElementById('token').value = savedToken;
@@ -57,12 +104,16 @@
             }
         }
 
-        async function savePage() {
+        function getToken() {
             const token = document.getElementById('token').value.trim();
-            if (!token) {
-                alert('Please enter and save your GitHub token first.');
-                return;
-            }
+            if (!token) alert('Please enter and save your GitHub token first.');
+            return token;
+        }
+
+        // =============== SINGLE FILE SAVE (Original) ===============
+        async function savePage() {
+            const token = getToken();
+            if (!token) return;
 
             const path = document.getElementById('path').value.trim() || 'docs/';
             let filename = document.getElementById('filename').value.trim();
@@ -70,61 +121,260 @@
 
             if (!filename) { alert('Please enter a file name.'); return; }
             if (!content) { alert('Please write some content.'); return; }
-
-            // Ensure .md extension
             if (!filename.endsWith('.md')) filename += '.md';
 
-            // Ensure trailing slash on path
             const fullPath = (path.endsWith('/') ? path : path + '/') + filename;
-
-            const repoOwner = 'kaunghtetminkght-prog';
-            const repoName = 'mk-docs';
-            const apiUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/contents/${fullPath}`;
-
             const statusDiv = document.getElementById('status');
-            statusDiv.innerHTML = '⏳ Saving... Please wait.';
+            statusDiv.innerHTML = '⏳ Saving...';
 
             try {
-                // 1. Check if file exists to get its SHA (for overwriting)
-                let sha = null;
-                try {
-                    const getResp = await fetch(apiUrl, {
-                        headers: { 'Authorization': `token ${token}` }
-                    });
-                    if (getResp.ok) {
-                        const data = await getResp.json();
-                        sha = data.sha;
-                    }
-                } catch (e) { /* File likely doesn't exist */ }
-
-                // 2. Prepare the commit
-                const encodedContent = btoa(unescape(encodeURIComponent(content)));
-                const payload = {
-                    message: `Update ${fullPath} via web editor`,
-                    content: encodedContent,
-                    branch: 'main'
-                };
-                if (sha) payload.sha = sha;
-
-                const putResp = await fetch(apiUrl, {
-                    method: 'PUT',
-                    headers: {
-                        'Authorization': `token ${token}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(payload)
-                });
-
-                if (putResp.ok) {
-                    statusDiv.innerHTML = `<span class="success">✅ Success! File saved. Your site will rebuild automatically in ~1 minute.</span>`;
-                    statusDiv.innerHTML += `<br><a href="https://kaunghtetminkght-prog.github.io/mk-docs/${filename.replace('.md','')}" target="_blank">🔗 View your new page</a>`;
+                const result = await pushToGitHub(fullPath, content, token);
+                if (result.success) {
+                    statusDiv.innerHTML = `<span class="success">✅ Saved! Site will rebuild in ~1 min.</span>
+                                           <br><a href="https://kaunghtetminkght-prog.github.io/mk-docs/${filename.replace('.md','')}" target="_blank">🔗 View page</a>`;
                 } else {
-                    const errData = await putResp.json();
-                    statusDiv.innerHTML = `<span class="error">❌ Error: ${errData.message || putResp.status}</span>`;
+                    statusDiv.innerHTML = `<span class="error">❌ Error: ${result.error}</span>`;
                 }
-            } catch (error) {
-                statusDiv.innerHTML = `<span class="error">❌ Network Error: ${error.message}</span>`;
+            } catch (e) {
+                statusDiv.innerHTML = `<span class="error">❌ ${e.message}</span>`;
             }
+        }
+
+        // =============== GITHUB API HELPER ===============
+        async function pushToGitHub(path, content, token, isBase64 = false) {
+            const repoOwner = 'kaunghtetminkght-prog';
+            const repoName = 'mk-docs';
+            const apiUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/contents/${path}`;
+
+            let encodedContent;
+            if (isBase64) {
+                encodedContent = content; // already base64
+            } else {
+                encodedContent = btoa(unescape(encodeURIComponent(content)));
+            }
+
+            // Get SHA if file exists
+            let sha = null;
+            try {
+                const getResp = await fetch(apiUrl, { headers: { 'Authorization': `token ${token}` } });
+                if (getResp.ok) {
+                    const data = await getResp.json();
+                    sha = data.sha;
+                }
+            } catch (e) { /* ignore */ }
+
+            const payload = {
+                message: `Update ${path} via web editor`,
+                content: encodedContent,
+                branch: 'main'
+            };
+            if (sha) payload.sha = sha;
+
+            const putResp = await fetch(apiUrl, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `token ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (putResp.ok) {
+                return { success: true };
+            } else {
+                const errData = await putResp.json();
+                return { success: false, error: errData.message || putResp.status };
+            }
+        }
+
+        // =============== BATCH UPLOAD ENGINE ===============
+        function log(msg, type = 'info') {
+            const logDiv = document.getElementById('uploadLog');
+            const time = new Date().toLocaleTimeString();
+            const colorClass = type === 'success' ? 'log-success' : (type === 'error' ? 'log-error' : 'log-info');
+            logDiv.innerHTML += `[${time}] <span class="${colorClass}">${msg}</span>\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function sanitizePath(p) {
+            // Remove dangerous prefixes and normalize
+            let clean = p.replace(/^(\.\.\/|\/)+/g, '').replace(/\/\.\.\//g, '/');
+            if (clean.startsWith('./')) clean = clean.substring(2);
+            return clean;
+        }
+
+        function readFileAsBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    let result = e.target.result;
+                    // Remove data URL prefix if present
+                    const base64 = result.includes('base64,') ? result.split(',')[1] : result;
+                    resolve(base64);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function uploadFilesToGitHub(fileList, basePath = 'docs/', stripRoot = true) {
+            const token = getToken();
+            if (!token) return;
+
+            // Build file map: { path, base64Content }
+            const files = [];
+            for (const file of fileList) {
+                let relativePath = file.webkitRelativePath || file.name;
+                // For folder upload, file.webkitRelativePath includes the root folder.
+                // For ZIP, we handle it separately.
+
+                if (stripRoot && file.webkitRelativePath) {
+                    // Strip the first folder name (e.g., "my-assets/img/logo.png" -> "img/logo.png")
+                    const parts = relativePath.split('/');
+                    if (parts.length > 1) {
+                        parts.shift();
+                        relativePath = parts.join('/');
+                    }
+                }
+
+                let finalPath = (basePath.endsWith('/') ? basePath : basePath + '/') + relativePath;
+                finalPath = sanitizePath(finalPath);
+
+                if (!finalPath) continue; // skip empty
+
+                try {
+                    const base64 = await readFileAsBase64(file);
+                    files.push({ path: finalPath, content: base64 });
+                } catch (e) {
+                    log(`❌ Failed to read ${file.name}: ${e.message}`, 'error');
+                }
+            }
+
+            if (files.length === 0) {
+                log('⚠️ No files to upload.', 'error');
+                return;
+            }
+
+            log(`📦 Preparing to upload ${files.length} files...`, 'info');
+
+            // Upload with concurrency = 3
+            const concurrency = 3;
+            let uploaded = 0;
+            let failed = 0;
+
+            for (let i = 0; i < files.length; i += concurrency) {
+                const chunk = files.slice(i, i + concurrency);
+                const promises = chunk.map(async (file) => {
+                    const result = await pushToGitHub(file.path, file.content, token, true);
+                    if (result.success) {
+                        log(`✅ Uploaded: ${file.path}`, 'success');
+                        uploaded++;
+                    } else {
+                        log(`❌ Failed: ${file.path} (${result.error})`, 'error');
+                        failed++;
+                    }
+                });
+                await Promise.allSettled(promises);
+                // Small delay to avoid rate limits
+                await new Promise(r => setTimeout(r, 500));
+            }
+
+            log(`🏁 Done! Uploaded: ${uploaded}, Failed: ${failed}. Site will rebuild in ~1 min.`, 'info');
+        }
+
+        // =============== HANDLE FOLDER UPLOAD ===============
+        async function handleBatchUpload() {
+            const folderInput = document.getElementById('folderInput');
+            const zipInput = document.getElementById('zipInput');
+            const stripRoot = document.getElementById('stripRootFolder').checked;
+
+            const folderFiles = folderInput.files;
+            const zipFiles = zipInput.files;
+
+            if (folderFiles.length === 0 && zipFiles.length === 0) {
+                alert('Please select a folder OR a ZIP file first.');
+                return;
+            }
+
+            // Clear log
+            document.getElementById('uploadLog').innerHTML = '';
+
+            // 1. Handle Folder Upload
+            if (folderFiles.length > 0) {
+                log(`📂 Processing folder upload (${folderFiles.length} files)...`, 'info');
+                await uploadFilesToGitHub(folderFiles, 'docs/', stripRoot);
+            }
+
+            // 2. Handle ZIP Upload
+            if (zipFiles.length > 0) {
+                const zipFile = zipFiles[0];
+                log(`🗜️ Processing ZIP: ${zipFile.name}...`, 'info');
+                try {
+                    const arrayBuffer = await zipFile.arrayBuffer();
+                    const zip = await JSZip.loadAsync(arrayBuffer);
+
+                    const entries = Object.keys(zip.files);
+                    const filePromises = [];
+
+                    for (const entryName of entries) {
+                        const entry = zip.files[entryName];
+                        if (entry.dir) continue; // skip directories
+
+                        let fileName = entryName;
+                        // Strip root folder if checked
+                        if (stripRoot) {
+                            const parts = fileName.split('/');
+                            if (parts.length > 1) {
+                                parts.shift();
+                                fileName = parts.join('/');
+                            }
+                        }
+                        const finalPath = sanitizePath('docs/' + fileName);
+                        if (!finalPath) continue;
+
+                        // Get content as base64
+                        const base64 = await entry.async('base64');
+                        filePromises.push({ path: finalPath, content: base64 });
+                    }
+
+                    if (filePromises.length === 0) {
+                        log('⚠️ ZIP appears empty or contains only folders.', 'error');
+                        return;
+                    }
+
+                    log(`📦 Extracted ${filePromises.length} files from ZIP. Uploading...`, 'info');
+
+                    const token = getToken();
+                    if (!token) return;
+
+                    // Upload with concurrency=3
+                    const concurrency = 3;
+                    let uploaded = 0;
+                    let failed = 0;
+                    for (let i = 0; i < filePromises.length; i += concurrency) {
+                        const chunk = filePromises.slice(i, i + concurrency);
+                        const promises = chunk.map(async (file) => {
+                            const result = await pushToGitHub(file.path, file.content, token, true);
+                            if (result.success) {
+                                log(`✅ Uploaded: ${file.path}`, 'success');
+                                uploaded++;
+                            } else {
+                                log(`❌ Failed: ${file.path} (${result.error})`, 'error');
+                                failed++;
+                            }
+                        });
+                        await Promise.allSettled(promises);
+                        await new Promise(r => setTimeout(r, 500));
+                    }
+
+                    log(`🏁 ZIP done! Uploaded: ${uploaded}, Failed: ${failed}.`, 'info');
+
+                } catch (e) {
+                    log(`❌ ZIP processing error: ${e.message}`, 'error');
+                }
+            }
+
+            log('✅ All tasks finished! Your site will rebuild automatically in ~1 minute.', 'success');
         }
     </script>
 </body>
