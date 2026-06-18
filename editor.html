@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Docs Editor</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; background: #f5f5f5; }
+        input, textarea { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        textarea { height: 400px; font-family: monospace; }
+        button { background: #28a745; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        button:hover { background: #218838; }
+        #status { margin-top: 15px; padding: 10px; border-radius: 4px; background: #fff; }
+        .success { color: green; }
+        .error { color: red; }
+        .token-input { background: #fff3cd; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
+        .token-input label { font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>📝 Create / Edit Docs Page</h1>
+
+    <div class="token-input">
+        <label for="token">GitHub Personal Access Token (needs `repo` scope):</label>
+        <input type="password" id="token" placeholder="Enter your token here..." style="margin-top:5px;">
+        <small style="display:block;margin-top:5px;">This is stored only in your browser's localStorage for convenience.</small>
+        <button onclick="saveToken()" style="background:#6c757d;padding:6px 12px;font-size:14px;margin-top:5px;">Save Token</button>
+        <span id="tokenStatus" style="margin-left:10px;"></span>
+    </div>
+
+    <label for="path">Folder (default: docs/):</label>
+    <input type="text" id="path" value="docs/" placeholder="e.g., docs/ or guides/">
+
+    <label for="filename">File Name (without .md):</label>
+    <input type="text" id="filename" placeholder="my-new-page">
+
+    <label for="content">Markdown Content:</label>
+    <textarea id="content" placeholder="Write your Markdown here..."></textarea>
+
+    <button onclick="savePage()">💾 Save to GitHub</button>
+    <div id="status"></div>
+
+    <script>
+        // Load saved token from localStorage
+        const savedToken = localStorage.getItem('github_token');
+        if (savedToken) {
+            document.getElementById('token').value = savedToken;
+            document.getElementById('tokenStatus').innerHTML = '✅ Loaded from storage.';
+        }
+
+        function saveToken() {
+            const token = document.getElementById('token').value.trim();
+            if (token) {
+                localStorage.setItem('github_token', token);
+                document.getElementById('tokenStatus').innerHTML = '✅ Token saved successfully!';
+            } else {
+                alert('Please enter a token.');
+            }
+        }
+
+        async function savePage() {
+            const token = document.getElementById('token').value.trim();
+            if (!token) {
+                alert('Please enter and save your GitHub token first.');
+                return;
+            }
+
+            const path = document.getElementById('path').value.trim() || 'docs/';
+            let filename = document.getElementById('filename').value.trim();
+            const content = document.getElementById('content').value;
+
+            if (!filename) { alert('Please enter a file name.'); return; }
+            if (!content) { alert('Please write some content.'); return; }
+
+            // Ensure .md extension
+            if (!filename.endsWith('.md')) filename += '.md';
+
+            // Ensure trailing slash on path
+            const fullPath = (path.endsWith('/') ? path : path + '/') + filename;
+
+            const repoOwner = 'kaunghtetminkght-prog';
+            const repoName = 'mk-docs';
+            const apiUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/contents/${fullPath}`;
+
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = '⏳ Saving... Please wait.';
+
+            try {
+                // 1. Check if file exists to get its SHA (for overwriting)
+                let sha = null;
+                try {
+                    const getResp = await fetch(apiUrl, {
+                        headers: { 'Authorization': `token ${token}` }
+                    });
+                    if (getResp.ok) {
+                        const data = await getResp.json();
+                        sha = data.sha;
+                    }
+                } catch (e) { /* File likely doesn't exist */ }
+
+                // 2. Prepare the commit
+                const encodedContent = btoa(unescape(encodeURIComponent(content)));
+                const payload = {
+                    message: `Update ${fullPath} via web editor`,
+                    content: encodedContent,
+                    branch: 'main'
+                };
+                if (sha) payload.sha = sha;
+
+                const putResp = await fetch(apiUrl, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `token ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (putResp.ok) {
+                    statusDiv.innerHTML = `<span class="success">✅ Success! File saved. Your site will rebuild automatically in ~1 minute.</span>`;
+                    statusDiv.innerHTML += `<br><a href="https://kaunghtetminkght-prog.github.io/mk-docs/${filename.replace('.md','')}" target="_blank">🔗 View your new page</a>`;
+                } else {
+                    const errData = await putResp.json();
+                    statusDiv.innerHTML = `<span class="error">❌ Error: ${errData.message || putResp.status}</span>`;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<span class="error">❌ Network Error: ${error.message}</span>`;
+            }
+        }
+    </script>
+</body>
+</html>
