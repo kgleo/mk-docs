@@ -2,380 +2,768 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Docs Editor + Batch Upload</title>
+    <title>Docs Editor + Navigation Manager</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; max-width: 900px; margin: 30px auto; padding: 20px; background: #f5f5f5; }
-        input, textarea { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
-        textarea { height: 300px; font-family: monospace; }
-        button { background: #28a745; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin-top: 10px; }
-        button:hover { background: #218838; }
-        button.danger { background: #dc3545; }
-        button.danger:hover { background: #c82333; }
-        #status { margin-top: 15px; padding: 10px; border-radius: 4px; background: #fff; }
-        .success { color: green; }
-        .error { color: red; }
-        .token-input { background: #fff3cd; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
-        .token-input label { font-weight: bold; }
-        hr { margin: 30px 0; border: 1px solid #ddd; }
-        .upload-section { background: #e9ecef; padding: 20px; border-radius: 8px; }
-        .upload-section label { display: inline-block; margin-top: 10px; font-weight: bold; }
-        .upload-section input[type="file"] { display: block; margin: 5px 0 15px 0; }
-        .checkbox-group { margin: 10px 0; }
-        .checkbox-group label { font-weight: normal; margin-left: 5px; }
-        #uploadLog { background: #1e1e1e; color: #d4d4d4; padding: 15px; max-height: 400px; overflow-y: auto; border-radius: 4px; font-family: monospace; font-size: 13px; white-space: pre-wrap; word-break: break-all; margin-top: 15px; }
-        .log-success { color: #4caf50; }
-        .log-error { color: #f44336; }
-        .log-info { color: #64b5f6; }
-        .flex-row { display: flex; gap: 20px; flex-wrap: wrap; align-items: center; }
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 1400px; margin: 0 auto; padding: 20px; background: #f5f6f8; }
+        h1 { color: #172b4d; }
+        input, textarea, select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; width: 100%; margin: 4px 0; }
+        button { background: #0052cc; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; margin: 4px; }
+        button:hover { background: #0747a6; }
+        button.danger { background: #de350b; }
+        button.danger:hover { background: #b22222; }
+        button.success { background: #36b37e; }
+        button.success:hover { background: #00875a; }
+        button.outline { background: transparent; color: #172b4d; border: 1px solid #ddd; }
+        button.outline:hover { background: #e9ecf3; }
+
+        .layout { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+        .panel { background: white; border-radius: 8px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); flex: 1; min-width: 300px; max-height: 80vh; overflow-y: auto; }
+        .panel-nav { flex: 1.5; min-width: 400px; }
+        .panel-editor { flex: 1; min-width: 300px; }
+
+        .tree-item { padding: 6px 12px; margin: 2px 0; border-radius: 4px; cursor: grab; display: flex; align-items: center; gap: 8px; border-left: 3px solid transparent; }
+        .tree-item:hover { background: #f0f2f5; }
+        .tree-item.dragging { opacity: 0.5; }
+        .tree-item .icon { font-size: 16px; }
+        .tree-item .name { flex: 1; font-size: 14px; color: #172b4d; }
+        .tree-item .badge { font-size: 11px; background: #e9ecf3; padding: 2px 8px; border-radius: 12px; color: #6b778c; }
+        .tree-item .actions { display: flex; gap: 4px; }
+        .tree-item .actions button { padding: 2px 8px; font-size: 12px; background: transparent; color: #6b778c; border: none; cursor: pointer; }
+        .tree-item .actions button:hover { background: #e9ecf3; border-radius: 4px; color: #172b4d; }
+        .tree-item.group { border-left-color: #0052cc; background: #f8f9fa; font-weight: 500; }
+        .tree-item .child-indent { margin-left: 24px; width: 100%; }
+        .tree-children { margin-left: 20px; border-left: 2px solid #e9ecf3; padding-left: 8px; }
+
+        .token-section { background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        .token-section input { width: 60%; }
+
+        #status { margin-top: 12px; padding: 12px; border-radius: 4px; background: #f0f2f5; }
+        .success { color: #00875a; }
+        .error { color: #de350b; }
+
+        .editor-area textarea { height: 200px; font-family: 'Courier New', monospace; font-size: 13px; }
+        .editor-area input { margin: 4px 0; }
+
+        .drag-handle { cursor: grab; color: #6b778c; font-size: 14px; user-select: none; }
+
+        .quick-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+
+        @media (max-width: 768px) { .layout { flex-direction: column; } .panel-nav { min-width: unset; } }
     </style>
 </head>
 <body>
-    <h1>📝 Docs Manager</h1>
 
-    <!-- Token Section -->
-    <div class="token-input">
-        <label for="token">🔑 GitHub Personal Access Token (needs <code>repo</code> scope):</label>
-        <input type="password" id="token" placeholder="Paste your token here...">
-        <div style="margin-top:8px;">
-            <button onclick="saveToken()" style="background:#6c757d;padding:6px 18px;font-size:14px;">💾 Save Token</button>
-            <span id="tokenStatus" style="margin-left:15px;"></span>
+<h1>📚 Docs Manager + Navigation</h1>
+
+<!-- ===== TOKEN SECTION ===== -->
+<div class="token-section">
+    <label><strong>🔑 GitHub Token</strong> (needs <code>repo</code> scope):</label>
+    <input type="password" id="token" placeholder="Paste your token here..." style="width:70%;">
+    <button onclick="saveToken()" class="outline" style="padding:8px 16px;">💾 Save</button>
+    <span id="tokenStatus" style="margin-left:10px;"></span>
+    <br><small>Stored securely in your browser's localStorage.</small>
+</div>
+
+<!-- ===== LAYOUT ===== -->
+<div class="layout">
+    <!-- LEFT: NAVIGATION TREE -->
+    <div class="panel panel-nav">
+        <h2>📖 Navigation Tree</h2>
+        <div class="quick-actions">
+            <button onclick="loadNavigation()" class="outline">🔄 Refresh</button>
+            <button onclick="addNewPage()" class="success">➕ New Page</button>
+            <button onclick="addNewGroup()" class="outline">📁 New Group</button>
+            <button onclick="saveNavigation()" style="background:#36b37e;">💾 Save Nav to GitHub</button>
         </div>
-        <small>Token is stored securely in your browser's localStorage.</small>
+        <div id="treeContainer" style="margin-top:12px; min-height:200px; border: 1px dashed #ddd; padding: 12px; border-radius: 8px;">
+            <p style="color:#6b778c; text-align:center;">Load your navigation to see pages here.</p>
+        </div>
+        <div id="navStatus"></div>
     </div>
 
-    <!-- Single File Editor -->
-    <h2>✏️ Create / Edit Single Page</h2>
-    <label for="path">Folder (default: docs/):</label>
-    <input type="text" id="path" value="docs/" placeholder="e.g., docs/ or guides/">
-
-    <label for="filename">File Name (without .md):</label>
-    <input type="text" id="filename" placeholder="my-new-page">
-
-    <label for="content">Markdown Content:</label>
-    <textarea id="content" placeholder="Write your Markdown here..."></textarea>
-
-    <button onclick="savePage()">💾 Save Single File</button>
-    <div id="status"></div>
-
-    <hr>
-
-    <!-- Batch Upload Section -->
-    <div class="upload-section">
-        <h2>📁 Batch Upload (Folders / ZIP)</h2>
-        <p><small>Upload multiple files at once. Images, PDFs, and Markdown all supported.</small></p>
-
-        <div class="flex-row">
-            <div style="flex:1;">
-                <label>📂 Select Folder:</label>
-                <input type="file" id="folderInput" webkitdirectory multiple>
-            </div>
-            <div style="flex:1;">
-                <label>🗜️ Select ZIP File:</label>
-                <input type="file" id="zipInput" accept=".zip">
-            </div>
+    <!-- RIGHT: PAGE EDITOR -->
+    <div class="panel panel-editor editor-area">
+        <h2>✏️ Page Editor</h2>
+        <div id="editorContent">
+            <p style="color:#6b778c;">Select a page from the tree to edit.</p>
         </div>
-
-        <div class="checkbox-group">
-            <input type="checkbox" id="stripRootFolder" checked>
-            <label for="stripRootFolder">Strip the top-level folder name from paths (e.g., <code>myzip/docs/index.md</code> → <code>docs/index.md</code>)</label>
-        </div>
-
-        <button onclick="handleBatchUpload()" style="background:#17a2b8;">🚀 Upload All to docs/</button>
-
-        <div id="uploadLog">📋 Ready for upload...</div>
     </div>
+</div>
 
-    <script>
-        // =============== TOKEN MANAGEMENT ===============
-        const savedToken = localStorage.getItem('github_token');
-        if (savedToken) {
-            document.getElementById('token').value = savedToken;
-            document.getElementById('tokenStatus').innerHTML = '✅ Loaded from storage.';
+<!-- ===== STATUS BAR ===== -->
+<div id="status"></div>
+
+<script>
+    // ============================================================
+    //  TOKEN MANAGEMENT
+    // ============================================================
+    const savedToken = localStorage.getItem('github_token');
+    if (savedToken) {
+        document.getElementById('token').value = savedToken;
+        document.getElementById('tokenStatus').innerHTML = '✅ Loaded.';
+    }
+
+    function saveToken() {
+        const token = document.getElementById('token').value.trim();
+        if (token) { localStorage.setItem('github_token', token);
+            document.getElementById('tokenStatus').innerHTML = '✅ Saved!'; }
+        else alert('Please enter a token.');
+    }
+
+    function getToken() {
+        const t = document.getElementById('token').value.trim();
+        if (!t) alert('Please enter your GitHub token.');
+        return t;
+    }
+
+    // ============================================================
+    //  GITHUB API HELPERS
+    // ============================================================
+    const REPO_OWNER = 'kaunghtetminkght-prog';
+    const REPO_NAME = 'mk-docs';
+
+    async function fetchFile(path, token) {
+        const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${path}`;
+        const resp = await fetch(url, { headers: { 'Authorization': `token ${token}` } });
+        if (!resp.ok) {
+            if (resp.status === 404) return null;
+            throw new Error(`HTTP ${resp.status}`);
         }
+        const data = await resp.json();
+        const content = atob(data.content);
+        return { content, sha: data.sha };
+    }
 
-        function saveToken() {
-            const token = document.getElementById('token').value.trim();
-            if (token) {
-                localStorage.setItem('github_token', token);
-                document.getElementById('tokenStatus').innerHTML = '✅ Token saved successfully!';
-            } else {
-                alert('Please enter a token.');
+    async function updateFile(path, content, token, sha = null) {
+        const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${path}`;
+        const payload = {
+            message: `Update ${path} via editor`,
+            content: btoa(unescape(encodeURIComponent(content))),
+            branch: 'main'
+        };
+        if (sha) payload.sha = sha;
+
+        const resp = await fetch(url, {
+            method: 'PUT',
+            headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!resp.ok) {
+            const err = await resp.json();
+            throw new Error(err.message || 'Update failed');
+        }
+        return await resp.json();
+    }
+
+    async function createFile(path, content, token) {
+        return await updateFile(path, content, token);
+    }
+
+    async function deleteFile(path, token, sha) {
+        const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${path}`;
+        const resp = await fetch(url, {
+            method: 'DELETE',
+            headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: `Delete ${path}`, sha, branch: 'main' })
+        });
+        if (!resp.ok) throw new Error('Delete failed');
+    }
+
+    // ============================================================
+    //  NAVIGATION PARSING & BUILDING
+    // ============================================================
+    let navData = [];       // Array of { title, path, children?, isGroup? }
+    let selectedPath = null;
+    let currentFileSha = null;
+
+    function parseNavYaml(yamlContent) {
+        // Find the nav: section
+        const lines = yamlContent.split('\n');
+        let inNav = false;
+        let navLines = [];
+        let indentStack = [];
+        let currentLevel = 0;
+
+        for (let line of lines) {
+            if (line.trim() === '' || line.trim().startsWith('#')) {
+                if (inNav) navLines.push(line);
+                continue;
+            }
+            if (!inNav && line.trim().startsWith('nav:')) {
+                inNav = true;
+                navLines.push(line);
+                continue;
+            }
+            if (inNav) {
+                // Check if we've exited nav (a non-indented line not starting with space or -)
+                const trimmed = line.trim();
+                if (trimmed && !line.startsWith(' ') && !line.startsWith('\t') && !trimmed.startsWith('#') && !trimmed.startsWith('-')) {
+                    inNav = false;
+                    continue;
+                }
+                navLines.push(line);
             }
         }
 
-        function getToken() {
-            const token = document.getElementById('token').value.trim();
-            if (!token) alert('Please enter and save your GitHub token first.');
-            return token;
+        if (navLines.length === 0) {
+            // Try to build from file list
+            return buildNavFromFiles(yamlContent);
         }
 
-        // =============== SINGLE FILE SAVE (Original) ===============
-        async function savePage() {
-            const token = getToken();
-            if (!token) return;
+        // Parse navLines into a tree
+        const navYaml = navLines.join('\n');
+        try {
+            const parsed = jsyaml.load(navYaml);
+            return parsed.nav || [];
+        } catch (e) {
+            return buildNavFromFiles(yamlContent);
+        }
+    }
 
-            const path = document.getElementById('path').value.trim() || 'docs/';
-            let filename = document.getElementById('filename').value.trim();
-            const content = document.getElementById('content').value;
+    // Simple JS-YAML implementation (minimal)
+    // Since we can't load a full YAML library easily, we'll use a simple recursive parser
+    function parseSimpleNav(lines, startIdx) {
+        const result = [];
+        let i = startIdx;
+        while (i < lines.length) {
+            const line = lines[i];
+            if (line.trim() === '' || line.trim().startsWith('#')) { i++; continue; }
+            const indent = line.search(/\S/);
+            if (indent === 0 && line.trim().startsWith('-')) {
+                // Top-level item
+                const item = parseNavItem(lines, i);
+                result.push(item.node);
+                i = item.nextIdx;
+            } else if (indent === 0 && line.trim() !== '' && !line.trim().startsWith('-')) {
+                // Not a nav item - end
+                break;
+            } else {
+                i++;
+            }
+        }
+        return { nodes: result, nextIdx: i };
+    }
 
-            if (!filename) { alert('Please enter a file name.'); return; }
-            if (!content) { alert('Please write some content.'); return; }
-            if (!filename.endsWith('.md')) filename += '.md';
+    function parseNavItem(lines, idx) {
+        const line = lines[idx].trim();
+        const isGroup = line.includes(':') && !line.includes('.md') && !line.includes('/');
+        let node = { title: '', path: null, children: [], isGroup: false };
 
-            const fullPath = (path.endsWith('/') ? path : path + '/') + filename;
-            const statusDiv = document.getElementById('status');
-            statusDiv.innerHTML = '⏳ Saving...';
-
-            try {
-                const result = await pushToGitHub(fullPath, content, token);
-                if (result.success) {
-                    statusDiv.innerHTML = `<span class="success">✅ Saved! Site will rebuild in ~1 min.</span>
-                                           <br><a href="https://kaunghtetminkght-prog.github.io/mk-docs/${filename.replace('.md','')}" target="_blank">🔗 View page</a>`;
+        if (isGroup) {
+            const parts = line.split(':');
+            node.title = parts[0].replace('-', '').trim();
+            node.isGroup = true;
+            node.path = null;
+            // Find children (indented)
+            const baseIndent = lines[idx].search(/\S/);
+            const children = [];
+            let i = idx + 1;
+            while (i < lines.length) {
+                const childLine = lines[i];
+                if (childLine.trim() === '' || childLine.trim().startsWith('#')) { i++; continue; }
+                const childIndent = childLine.search(/\S/);
+                if (childIndent <= baseIndent) break;
+                if (childLine.trim().startsWith('-')) {
+                    const childResult = parseNavItem(lines, i);
+                    children.push(childResult.node);
+                    i = childResult.nextIdx;
                 } else {
-                    statusDiv.innerHTML = `<span class="error">❌ Error: ${result.error}</span>`;
-                }
-            } catch (e) {
-                statusDiv.innerHTML = `<span class="error">❌ ${e.message}</span>`;
-            }
-        }
-
-        // =============== GITHUB API HELPER ===============
-        async function pushToGitHub(path, content, token, isBase64 = false) {
-            const repoOwner = 'kaunghtetminkght-prog';
-            const repoName = 'mk-docs';
-            const apiUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/contents/${path}`;
-
-            let encodedContent;
-            if (isBase64) {
-                encodedContent = content; // already base64
-            } else {
-                encodedContent = btoa(unescape(encodeURIComponent(content)));
-            }
-
-            // Get SHA if file exists
-            let sha = null;
-            try {
-                const getResp = await fetch(apiUrl, { headers: { 'Authorization': `token ${token}` } });
-                if (getResp.ok) {
-                    const data = await getResp.json();
-                    sha = data.sha;
-                }
-            } catch (e) { /* ignore */ }
-
-            const payload = {
-                message: `Update ${path} via web editor`,
-                content: encodedContent,
-                branch: 'main'
-            };
-            if (sha) payload.sha = sha;
-
-            const putResp = await fetch(apiUrl, {
-                method: 'PUT',
-                headers: {
-                    'Authorization': `token ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(payload)
-            });
-
-            if (putResp.ok) {
-                return { success: true };
-            } else {
-                const errData = await putResp.json();
-                return { success: false, error: errData.message || putResp.status };
-            }
-        }
-
-        // =============== BATCH UPLOAD ENGINE ===============
-        function log(msg, type = 'info') {
-            const logDiv = document.getElementById('uploadLog');
-            const time = new Date().toLocaleTimeString();
-            const colorClass = type === 'success' ? 'log-success' : (type === 'error' ? 'log-error' : 'log-info');
-            logDiv.innerHTML += `[${time}] <span class="${colorClass}">${msg}</span>\n`;
-            logDiv.scrollTop = logDiv.scrollHeight;
-        }
-
-        function sanitizePath(p) {
-            // Remove dangerous prefixes and normalize
-            let clean = p.replace(/^(\.\.\/|\/)+/g, '').replace(/\/\.\.\//g, '/');
-            if (clean.startsWith('./')) clean = clean.substring(2);
-            return clean;
-        }
-
-        function readFileAsBase64(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    let result = e.target.result;
-                    // Remove data URL prefix if present
-                    const base64 = result.includes('base64,') ? result.split(',')[1] : result;
-                    resolve(base64);
-                };
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
-        }
-
-        async function uploadFilesToGitHub(fileList, basePath = 'docs/', stripRoot = true) {
-            const token = getToken();
-            if (!token) return;
-
-            // Build file map: { path, base64Content }
-            const files = [];
-            for (const file of fileList) {
-                let relativePath = file.webkitRelativePath || file.name;
-                // For folder upload, file.webkitRelativePath includes the root folder.
-                // For ZIP, we handle it separately.
-
-                if (stripRoot && file.webkitRelativePath) {
-                    // Strip the first folder name (e.g., "my-assets/img/logo.png" -> "img/logo.png")
-                    const parts = relativePath.split('/');
-                    if (parts.length > 1) {
-                        parts.shift();
-                        relativePath = parts.join('/');
-                    }
-                }
-
-                let finalPath = (basePath.endsWith('/') ? basePath : basePath + '/') + relativePath;
-                finalPath = sanitizePath(finalPath);
-
-                if (!finalPath) continue; // skip empty
-
-                try {
-                    const base64 = await readFileAsBase64(file);
-                    files.push({ path: finalPath, content: base64 });
-                } catch (e) {
-                    log(`❌ Failed to read ${file.name}: ${e.message}`, 'error');
+                    i++;
                 }
             }
+            node.children = children;
+            return { node, nextIdx: i };
+        } else {
+            // Simple page: - Title: path.md
+            const parts = line.replace('-', '').trim().split(':');
+            node.title = parts[0].trim();
+            node.path = parts.slice(1).join(':').trim();
+            node.isGroup = false;
+            return { node, nextIdx: idx + 1 };
+        }
+    }
 
-            if (files.length === 0) {
-                log('⚠️ No files to upload.', 'error');
-                return;
+    // Fallback: build nav from files in docs/
+    async function buildNavFromFiles(yamlContent) {
+        const token = getToken();
+        if (!token) return [];
+        try {
+            const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/docs`;
+            const resp = await fetch(url, { headers: { 'Authorization': `token ${token}` } });
+            if (!resp.ok) return [];
+            const files = await resp.json();
+            const mdFiles = files.filter(f => f.name.endsWith('.md') && f.name !== 'index.md');
+            const nav = [{ title: 'Home', path: 'index.md' }];
+            for (const f of mdFiles) {
+                const name = f.name.replace('.md', '');
+                nav.push({ title: name.charAt(0).toUpperCase() + name.slice(1), path: f.name });
             }
+            return nav;
+        } catch (e) { return []; }
+    }
 
-            log(`📦 Preparing to upload ${files.length} files...`, 'info');
+    // ============================================================
+    //  RENDER TREE
+    // ============================================================
+    function renderTree(nav) {
+        const container = document.getElementById('treeContainer');
+        if (!nav || nav.length === 0) {
+            container.innerHTML = '<p style="color:#6b778c; text-align:center;">No pages found. Create your first page!</p>';
+            return;
+        }
 
-            // Upload with concurrency = 3
-            const concurrency = 3;
-            let uploaded = 0;
-            let failed = 0;
+        const list = document.createElement('ul');
+        list.style.listStyle = 'none';
+        list.style.padding = '0';
+        list.style.margin = '0';
 
-            for (let i = 0; i < files.length; i += concurrency) {
-                const chunk = files.slice(i, i + concurrency);
-                const promises = chunk.map(async (file) => {
-                    const result = await pushToGitHub(file.path, file.content, token, true);
-                    if (result.success) {
-                        log(`✅ Uploaded: ${file.path}`, 'success');
-                        uploaded++;
-                    } else {
-                        log(`❌ Failed: ${file.path} (${result.error})`, 'error');
-                        failed++;
-                    }
+        for (const item of nav) {
+            const li = createTreeItem(item);
+            list.appendChild(li);
+        }
+
+        container.innerHTML = '';
+        container.appendChild(list);
+
+        // Enable Sortable
+        Sortable.create(list, {
+            handle: '.drag-handle',
+            animation: 150,
+            onEnd: function(evt) {
+                // Rebuild navData from DOM
+                rebuildNavFromDOM();
+            }
+        });
+    }
+
+    function createTreeItem(item, parent = null) {
+        const li = document.createElement('li');
+        li.style.margin = '2px 0';
+        li.dataset.path = item.path || '';
+
+        const div = document.createElement('div');
+        div.className = 'tree-item' + (item.isGroup ? ' group' : '');
+        div.draggable = false;
+
+        // Drag handle
+        const handle = document.createElement('span');
+        handle.className = 'drag-handle';
+        handle.textContent = '⠿';
+        handle.style.marginRight = '8px';
+        div.appendChild(handle);
+
+        // Icon
+        const icon = document.createElement('span');
+        icon.className = 'icon';
+        icon.textContent = item.isGroup ? '📁' : '📄';
+        div.appendChild(icon);
+
+        // Name
+        const name = document.createElement('span');
+        name.className = 'name';
+        name.textContent = item.title || (item.path ? item.path.replace('.md', '') : 'Untitled');
+        div.appendChild(name);
+
+        // Badge
+        if (item.path) {
+            const badge = document.createElement('span');
+            badge.className = 'badge';
+            badge.textContent = item.path;
+            div.appendChild(badge);
+        }
+
+        // Actions
+        const actions = document.createElement('span');
+        actions.className = 'actions';
+
+        if (!item.isGroup) {
+            const editBtn = document.createElement('button');
+            editBtn.textContent = '✏️';
+            editBtn.title = 'Edit this page';
+            editBtn.onclick = (e) => { e.stopPropagation(); editPage(item.path); };
+            actions.appendChild(editBtn);
+        }
+
+        const addBtn = document.createElement('button');
+        addBtn.textContent = '➕';
+        addBtn.title = item.isGroup ? 'Add page to this group' : 'Add page after this';
+        addBtn.onclick = (e) => { e.stopPropagation(); addPageAfter(item); };
+        actions.appendChild(addBtn);
+
+        const delBtn = document.createElement('button');
+        delBtn.textContent = '🗑️';
+        delBtn.title = 'Delete this page';
+        delBtn.style.color = '#de350b';
+        delBtn.onclick = (e) => { e.stopPropagation(); deletePage(item); };
+        actions.appendChild(delBtn);
+
+        div.appendChild(actions);
+
+        // Click to select/edit
+        div.onclick = () => {
+            if (item.path) editPage(item.path);
+            else if (item.isGroup) {
+                // Toggle children visibility
+                const childrenUl = li.querySelector('ul');
+                if (childrenUl) {
+                    childrenUl.style.display = childrenUl.style.display === 'none' ? 'block' : 'none';
+                }
+            }
+        };
+
+        li.appendChild(div);
+
+        // Children (for groups)
+        if (item.children && item.children.length > 0) {
+            const childUl = document.createElement('ul');
+            childUl.style.listStyle = 'none';
+            childUl.style.padding = '0';
+            childUl.style.marginLeft = '20px';
+            childUl.style.borderLeft = '2px solid #e9ecf3';
+            childUl.style.paddingLeft = '8px';
+            for (const child of item.children) {
+                const childLi = createTreeItem(child, item);
+                childUl.appendChild(childLi);
+            }
+            li.appendChild(childUl);
+        }
+
+        return li;
+    }
+
+    // ============================================================
+    //  NAVIGATION OPERATIONS
+    // ============================================================
+    function rebuildNavFromDOM() {
+        const container = document.getElementById('treeContainer');
+        const rootList = container.querySelector('ul');
+        if (!rootList) return;
+        navData = extractNavFromList(rootList);
+    }
+
+    function extractNavFromList(ul) {
+        const result = [];
+        const items = ul.children;
+        for (const li of items) {
+            const div = li.querySelector('.tree-item');
+            if (!div) continue;
+            const name = div.querySelector('.name')?.textContent || 'Untitled';
+            const badge = div.querySelector('.badge')?.textContent || '';
+            const isGroup = div.classList.contains('group');
+            const childUl = li.querySelector('ul');
+            const children = childUl ? extractNavFromList(childUl) : [];
+
+            if (isGroup) {
+                result.push({
+                    title: name,
+                    path: null,
+                    isGroup: true,
+                    children: children.length > 0 ? children : []
                 });
-                await Promise.allSettled(promises);
-                // Small delay to avoid rate limits
-                await new Promise(r => setTimeout(r, 500));
+            } else {
+                const path = badge || (name.toLowerCase().replace(/\s+/g, '-') + '.md');
+                result.push({
+                    title: name,
+                    path: path,
+                    isGroup: false,
+                    children: children.length > 0 ? children : []
+                });
             }
+        }
+        return result;
+    }
 
-            log(`🏁 Done! Uploaded: ${uploaded}, Failed: ${failed}. Site will rebuild in ~1 min.`, 'info');
+    function addNewPage() {
+        const name = prompt('Enter page title:');
+        if (!name) return;
+        const path = name.toLowerCase().replace(/\s+/g, '-') + '.md';
+        navData.push({ title: name, path: path, isGroup: false });
+        renderTree(navData);
+        document.getElementById('navStatus').innerHTML = '⚠️ Unsaved changes. Click "Save Nav to GitHub".';
+    }
+
+    function addNewGroup() {
+        const name = prompt('Enter group name:');
+        if (!name) return;
+        navData.push({ title: name, path: null, isGroup: true, children: [] });
+        renderTree(navData);
+        document.getElementById('navStatus').innerHTML = '⚠️ Unsaved changes. Click "Save Nav to GitHub".';
+    }
+
+    function addPageAfter(item) {
+        const name = prompt('Enter new page title:');
+        if (!name) return;
+        const path = name.toLowerCase().replace(/\s+/g, '-') + '.md';
+        const newPage = { title: name, path: path, isGroup: false };
+
+        // Find the index of the item in navData and insert after
+        const findAndInsert = (arr, target, newItem) => {
+            for (let i = 0; i < arr.length; i++) {
+                if (arr[i].title === target.title && arr[i].path === target.path) {
+                    arr.splice(i + 1, 0, newItem);
+                    return true;
+                }
+                if (arr[i].children) {
+                    if (findAndInsert(arr[i].children, target, newItem)) return true;
+                }
+            }
+            return false;
+        };
+
+        if (!findAndInsert(navData, item, newPage)) {
+            navData.push(newPage);
+        }
+        renderTree(navData);
+        document.getElementById('navStatus').innerHTML = '⚠️ Unsaved changes. Click "Save Nav to GitHub".';
+    }
+
+    function deletePage(item) {
+        if (!confirm(`Delete "${item.title}"? This removes it from navigation but does NOT delete the .md file.`)) return;
+        const removeFrom = (arr, target) => {
+            for (let i = 0; i < arr.length; i++) {
+                if (arr[i].title === target.title && arr[i].path === target.path) {
+                    arr.splice(i, 1);
+                    return true;
+                }
+                if (arr[i].children) {
+                    if (removeFrom(arr[i].children, target)) return true;
+                }
+            }
+            return false;
+        };
+        removeFrom(navData, item);
+        renderTree(navData);
+        document.getElementById('navStatus').innerHTML = '⚠️ Unsaved changes. Click "Save Nav to GitHub".';
+    }
+
+    // ============================================================
+    //  EDIT PAGE (Load content into editor)
+    // ============================================================
+    async function editPage(path) {
+        const token = getToken();
+        if (!token) return;
+        selectedPath = path;
+        const container = document.getElementById('editorContent');
+
+        try {
+            const result = await fetchFile(`docs/${path}`, token);
+            if (result) {
+                container.innerHTML = `
+                    <label><strong>File:</strong> ${path}</label>
+                    <input type="text" id="editTitle" value="${path.replace('.md', '')}" placeholder="Page title">
+                    <label>Content (Markdown):</label>
+                    <textarea id="editContent">${result.content}</textarea>
+                    <button onclick="saveEditedPage()" style="background:#36b37e;">💾 Save Page</button>
+                    <button onclick="deleteMD()" class="danger">🗑️ Delete .md File</button>
+                    <div id="editStatus"></div>
+                `;
+                currentFileSha = result.sha;
+                document.getElementById('editStatus').innerHTML = '';
+            } else {
+                container.innerHTML = `<p class="error">File not found: ${path}</p>`;
+            }
+        } catch (e) {
+            container.innerHTML = `<p class="error">Error loading: ${e.message}</p>`;
+        }
+    }
+
+    async function saveEditedPage() {
+        const token = getToken();
+        if (!token || !selectedPath) return;
+
+        const title = document.getElementById('editTitle').value.trim();
+        const content = document.getElementById('editContent').value;
+        const statusDiv = document.getElementById('editStatus');
+
+        if (!title || !content) {
+            statusDiv.innerHTML = '<span class="error">Title and content required.</span>';
+            return;
         }
 
-        // =============== HANDLE FOLDER UPLOAD ===============
-        async function handleBatchUpload() {
-            const folderInput = document.getElementById('folderInput');
-            const zipInput = document.getElementById('zipInput');
-            const stripRoot = document.getElementById('stripRootFolder').checked;
+        // Update the page title in navData if needed
+        const updateTitle = (arr, path, newTitle) => {
+            for (const item of arr) {
+                if (item.path === path) {
+                    item.title = newTitle;
+                    return true;
+                }
+                if (item.children) {
+                    if (updateTitle(item.children, path, newTitle)) return true;
+                }
+            }
+            return false;
+        };
+        updateTitle(navData, selectedPath, title);
 
-            const folderFiles = folderInput.files;
-            const zipFiles = zipInput.files;
+        try {
+            await updateFile(`docs/${selectedPath}`, content, token, currentFileSha);
+            statusDiv.innerHTML = '<span class="success">✅ Page saved! Rebuilding site...</span>';
+            // Also save nav changes
+            await saveNavigation();
+            renderTree(navData);
+        } catch (e) {
+            statusDiv.innerHTML = `<span class="error">❌ Error: ${e.message}</span>`;
+        }
+    }
 
-            if (folderFiles.length === 0 && zipFiles.length === 0) {
-                alert('Please select a folder OR a ZIP file first.');
+    async function deleteMD() {
+        if (!confirm(`Delete "${selectedPath}" permanently?`)) return;
+        const token = getToken();
+        if (!token || !selectedPath) return;
+
+        try {
+            await deleteFile(`docs/${selectedPath}`, token, currentFileSha);
+            // Remove from nav
+            const removeFrom = (arr, path) => {
+                for (let i = 0; i < arr.length; i++) {
+                    if (arr[i].path === path) {
+                        arr.splice(i, 1);
+                        return true;
+                    }
+                    if (arr[i].children) {
+                        if (removeFrom(arr[i].children, path)) return true;
+                    }
+                }
+                return false;
+            };
+            removeFrom(navData, selectedPath);
+            await saveNavigation();
+            renderTree(navData);
+            document.getElementById('editorContent').innerHTML = '<p>✅ Deleted. Refresh the tree.</p>';
+        } catch (e) {
+            alert('Error deleting: ' + e.message);
+        }
+    }
+
+    // ============================================================
+    //  SAVE NAVIGATION TO GITHUB
+    // ============================================================
+    async function saveNavigation() {
+        const token = getToken();
+        if (!token) return;
+
+        const statusDiv = document.getElementById('navStatus');
+        statusDiv.innerHTML = '⏳ Saving navigation...';
+
+        try {
+            // Build nav YAML from navData
+            const navYaml = buildNavYaml(navData);
+            const fullYaml = await getFullMkdocsYaml(navYaml);
+
+            // Fetch current mkdocs.yml to get SHA
+            const current = await fetchFile('mkdocs.yml', token);
+            const sha = current ? current.sha : null;
+
+            await updateFile('mkdocs.yml', fullYaml, token, sha);
+            statusDiv.innerHTML = '<span class="success">✅ Navigation saved! Rebuilding site...</span>';
+            document.getElementById('navStatus').innerHTML = '✅ Saved!';
+        } catch (e) {
+            statusDiv.innerHTML = `<span class="error">❌ Error: ${e.message}</span>`;
+        }
+    }
+
+    function buildNavYaml(nav, indent = 0) {
+        const spaces = '  '.repeat(indent);
+        let result = '';
+        for (const item of nav) {
+            if (item.isGroup) {
+                result += `${spaces}- ${item.title}:\n`;
+                if (item.children && item.children.length > 0) {
+                    result += buildNavYaml(item.children, indent + 1);
+                }
+            } else {
+                const path = item.path || (item.title.toLowerCase().replace(/\s+/g, '-') + '.md');
+                result += `${spaces}- ${item.title}: ${path}\n`;
+            }
+        }
+        return result;
+    }
+
+    async function getFullMkdocsYaml(navYaml) {
+        const token = getToken();
+        const current = await fetchFile('mkdocs.yml', token);
+        let content = current ? current.content : '';
+
+        // Replace or add nav section
+        const navRegex = /^nav:.*$/m;
+        if (navRegex.test(content)) {
+            // Replace existing nav
+            const lines = content.split('\n');
+            let inNav = false;
+            let newLines = [];
+            for (const line of lines) {
+                if (!inNav && line.trim() === '') { newLines.push(line); continue; }
+                if (!inNav && line.trim().startsWith('nav:')) {
+                    inNav = true;
+                    newLines.push('nav:');
+                    continue;
+                }
+                if (inNav) {
+                    if (line.trim() === '' || line.startsWith(' ')) continue;
+                    if (line.trim() !== '' && !line.startsWith(' ')) {
+                        inNav = false;
+                        newLines.push(line);
+                    }
+                } else {
+                    newLines.push(line);
+                }
+            }
+            // Add new nav
+            newLines.push('nav:');
+            newLines.push(navYaml);
+            return newLines.join('\n');
+        } else {
+            // Append nav at the end
+            return content + '\n\nnav:\n' + navYaml;
+        }
+    }
+
+    // ============================================================
+    //  LOAD NAVIGATION
+    // ============================================================
+    async function loadNavigation() {
+        const token = getToken();
+        if (!token) return;
+
+        const statusDiv = document.getElementById('navStatus');
+        statusDiv.innerHTML = '⏳ Loading...';
+
+        try {
+            const result = await fetchFile('mkdocs.yml', token);
+            if (!result) {
+                statusDiv.innerHTML = '<span class="error">mkdocs.yml not found.</span>';
                 return;
             }
 
-            // Clear log
-            document.getElementById('uploadLog').innerHTML = '';
-
-            // 1. Handle Folder Upload
-            if (folderFiles.length > 0) {
-                log(`📂 Processing folder upload (${folderFiles.length} files)...`, 'info');
-                await uploadFilesToGitHub(folderFiles, 'docs/', stripRoot);
+            // Parse nav from YAML
+            const parsed = parseNavYaml(result.content);
+            if (parsed && parsed.length > 0) {
+                navData = parsed;
+            } else {
+                // Fallback: scan docs folder
+                const files = await buildNavFromFiles(result.content);
+                navData = files;
             }
 
-            // 2. Handle ZIP Upload
-            if (zipFiles.length > 0) {
-                const zipFile = zipFiles[0];
-                log(`🗜️ Processing ZIP: ${zipFile.name}...`, 'info');
-                try {
-                    const arrayBuffer = await zipFile.arrayBuffer();
-                    const zip = await JSZip.loadAsync(arrayBuffer);
-
-                    const entries = Object.keys(zip.files);
-                    const filePromises = [];
-
-                    for (const entryName of entries) {
-                        const entry = zip.files[entryName];
-                        if (entry.dir) continue; // skip directories
-
-                        let fileName = entryName;
-                        // Strip root folder if checked
-                        if (stripRoot) {
-                            const parts = fileName.split('/');
-                            if (parts.length > 1) {
-                                parts.shift();
-                                fileName = parts.join('/');
-                            }
-                        }
-                        const finalPath = sanitizePath('docs/' + fileName);
-                        if (!finalPath) continue;
-
-                        // Get content as base64
-                        const base64 = await entry.async('base64');
-                        filePromises.push({ path: finalPath, content: base64 });
-                    }
-
-                    if (filePromises.length === 0) {
-                        log('⚠️ ZIP appears empty or contains only folders.', 'error');
-                        return;
-                    }
-
-                    log(`📦 Extracted ${filePromises.length} files from ZIP. Uploading...`, 'info');
-
-                    const token = getToken();
-                    if (!token) return;
-
-                    // Upload with concurrency=3
-                    const concurrency = 3;
-                    let uploaded = 0;
-                    let failed = 0;
-                    for (let i = 0; i < filePromises.length; i += concurrency) {
-                        const chunk = filePromises.slice(i, i + concurrency);
-                        const promises = chunk.map(async (file) => {
-                            const result = await pushToGitHub(file.path, file.content, token, true);
-                            if (result.success) {
-                                log(`✅ Uploaded: ${file.path}`, 'success');
-                                uploaded++;
-                            } else {
-                                log(`❌ Failed: ${file.path} (${result.error})`, 'error');
-                                failed++;
-                            }
-                        });
-                        await Promise.allSettled(promises);
-                        await new Promise(r => setTimeout(r, 500));
-                    }
-
-                    log(`🏁 ZIP done! Uploaded: ${uploaded}, Failed: ${failed}.`, 'info');
-
-                } catch (e) {
-                    log(`❌ ZIP processing error: ${e.message}`, 'error');
-                }
-            }
-
-            log('✅ All tasks finished! Your site will rebuild automatically in ~1 minute.', 'success');
+            renderTree(navData);
+            statusDiv.innerHTML = `<span class="success">✅ Loaded ${navData.length} pages.</span>`;
+        } catch (e) {
+            statusDiv.innerHTML = `<span class="error">❌ Error: ${e.message}</span>`;
         }
-    </script>
+    }
+
+    // ============================================================
+    //  INIT
+    // ============================================================
+    // Load automatically on page load
+    window.onload = function() {
+        if (savedToken) {
+            setTimeout(loadNavigation, 500);
+        }
+    };
+</script>
 </body>
 </html>
