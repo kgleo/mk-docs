@@ -28,3 +28,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/deploy-pages@v4
+- run: pip install mkdocs-material mkdocs-git-revision-date-localized-plugin
