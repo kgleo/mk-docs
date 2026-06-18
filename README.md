@@ -1,96 +1,221 @@
-I've taken a look at your repository (https://github.com/kaunghtetminkght-prog/mk-docs).
+Here is a complete, professional README.md file that documents everything you've built – from the MkDocs setup, to the custom theme, to the advanced in‑browser editor.
 
-Currently, it appears to be completely empty. The browser shows a "Dismiss alert" message, but there are no files like mkdocs.yml or a docs/ folder yet.
+To add this, go to your repository root and click "Add file" → "Create new file". Name it exactly README.md, paste the content below, and commit it.
 
-Don't worry — this just means we're starting fresh. Here's how to get your MkDocs site up and running, step by step, directly from your browser:
+---
+# 📚 MkDocs Space – Full‑Width Documentation Site
 
-Step 1: Create the configuration file (mkdocs.yml)
+Welcome to my documentation repository!  
+This project is a fully browser‑based, no‑desktop‑required documentation site built with **MkDocs**, the **Material Theme**, and **GitHub Pages**.
 
-1. On your repository page, click the "Add file" dropdown and select "Create new file".
-2. Name the file exactly: mkdocs.yml
-3. Paste the following content (make sure to replace YOUR_USERNAME with kaunghtetminkght-prog):
-
-```yaml
-site_name: My Documentation
-site_url: https://kaunghtetminkght-prog.github.io/mk-docs/
-theme:
-  name: material
-```
-
-4. Scroll down and click "Commit new file".
-
-Step 2: Create your homepage (docs/index.md)
-
-1. Click "Add file" → "Create new file" again.
-2. Name it docs/index.md.
-3. Paste some content, for example:
-
-```markdown
-# Welcome to My Docs
-
-This site was built entirely in my browser using MkDocs!
-```
-
-4. Commit the file.
-
-Step 3: Create the GitHub Actions workflow (.github/workflows/deploy.yml)
-
-This tells GitHub to build your site automatically.
-
-1. Click "Add file" → "Create new file".
-2. Name it .github/workflows/deploy.yml.
-3. Paste the following:
-
-```yaml
-name: Deploy MkDocs site
-on:
-  push:
-    branches: [ main ]
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-      - run: pip install mkdocs-material
-      - run: mkdocs build
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: site/
-
-  deploy:
-    needs: build
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/deploy-pages@v4
-```
-
-4. Commit this file.
-
-Step 4: Enable GitHub Pages
-
-1. Go to your repository's Settings tab (the gear icon).
-2. On the left sidebar, click "Pages".
-3. Under "Source", select "GitHub Actions".
-4. That's it — the workflow you just created will handle the rest.
-
-Step 5: Trigger the build and view your site
-
-· Go to the "Actions" tab of your repo. You should see the workflow running. Wait about 1–2 minutes for it to finish (green checkmark).
-· Once complete, visit your live site at:
-    https://kaunghtetminkght-prog.github.io/mk-docs/
+It features a clean, Confluence‑inspired layout, an advanced in‑browser editor, and a fully automated build process – all managed directly from the GitHub web interface.
 
 ---
 
-Pro tip: You can add more pages by creating new .md files inside the docs/ folder (e.g., docs/another-page.md). MkDocs will automatically detect them and add them to the navigation.
+## 🚀 Live Site
 
-Give these steps a try, and let me know if you run into any issues at a specific step!
+> **https://kaunghtetminkght-prog.github.io/mk-docs/**
+
+---
+
+## ✨ Key Features
+
+- **Edge‑to‑Edge Layout** – No distracting cards or borders; content stretches 100% across the screen, making it mobile‑friendly.
+- **Confluence‑style Interface** – Clean white header, blue accents, and a page tree sidebar (with integrated table of contents).
+- **In‑Browser File Editor** – Create, edit, and delete `.md` pages directly from the browser.
+- **Batch Upload** – Upload entire folders or ZIP archives that auto‑extract into your `docs/` folder.
+- **Automated Build** – GitHub Actions automatically rebuilds your static site every time you push a change.
+
+---
+
+## 📁 Repository Structure
+
+```
+
+.
+├── .github/
+│   └── workflows/
+│       └── static.yml          # GitHub Actions workflow for deployment
+├── docs/
+│   ├── assets/                 # (Optional) Images, logos, etc.
+│   ├── stylesheets/
+│   │   └── extra.css           # Custom CSS (edge‑to‑edge, Confluence theme)
+│   ├── editor.html             # In‑browser file manager & Markdown editor
+│   └── index.md                # Homepage content
+├── mkdocs.yml                  # MkDocs configuration (theme, features, plugins)
+└── README.md                   # This file
+
+```
+
+---
+
+## ⚙️ How It Works (Configuration)
+
+### 1. `mkdocs.yml` – The Core Setup
+
+This file controls the entire look and behavior of the site.
+
+```yaml
+site_name: My Space
+site_url: https://kaunghtetminkght-prog.github.io/mk-docs/
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: white
+      accent: blue
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: blue
+      accent: light-blue
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+  font:
+    text: Inter
+    code: JetBrains Mono
+
+  features:
+    - navigation.sections      # Sidebar sections like a page tree
+    - navigation.expand        # Expand tree by default
+    - navigation.top           # Back to top button
+    - navigation.indexes       # Clickable index.md pages
+    - toc.integrate            # Moves the TOC into the left sidebar
+    - search.suggest
+    - search.highlight
+
+extra_css:
+  - stylesheets/extra.css
+
+extra:
+  generator: false             # Removes "Made with Material"
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/kaunghtetminkght-prog
+
+copyright: '© 2026 Your Name'
+```
+
+---
+
+2. docs/stylesheets/extra.css – Full‑Width Theme
+
+This CSS removes the default card layout and makes the content stretch edge‑to‑edge while keeping a professional look.
+
+Highlights:
+
+· Removes max‑width restrictions.
+· Eliminates white card backgrounds and borders.
+· Adds spacious padding for large screens and comfortable margins for mobile.
+· Mimics Atlassian (Confluence) colors and styling.
+
+---
+
+3. .github/workflows/static.yml – Automated Deployment
+
+This workflow automatically deploys your site whenever you push changes to the main branch. It uploads your static files (including the generated site/ folder) to GitHub Pages.
+
+---
+
+🛠️ The In‑Browser Editor (docs/editor.html)
+
+This is the most powerful tool in this repository. It allows you to manage your documentation entirely from your browser—no terminal or desktop apps required.
+
+What It Can Do
+
+Feature Description
+Single File Editor Create or edit .md files directly.
+Folder Upload Upload entire folders from your device; the structure is preserved.
+ZIP Upload Upload a .zip file; it auto‑extracts and pushes all contents to docs/.
+Strip Root Folder Removes the top‑level folder name from extracted paths (toggle on/off).
+Progress Log See real‑time success/failure feedback for every file.
+
+How to Use the Editor
+
+1. Open: https://kaunghtetminkght-prog.github.io/mk-docs/editor.html
+2. Enter your GitHub Personal Access Token (requires repo scope).
+   · Generate one here: GitHub Token Settings
+   · Store it securely in your browser using the "Save Token" button.
+3. Use the "Create / Edit Single Page" section to add or modify a single file.
+4. Use the "Batch Upload" section to upload a folder or a ZIP file.
+5. Wait ~1 minute for GitHub Actions to rebuild the site after each upload.
+
+---
+
+📝 Adding / Editing Content (Quick Guide)
+
+Option A: Using the Editor (Recommended)
+
+· Go to the Editor URL.
+· Add a token, write your Markdown, and click "Save Single File".
+· Or upload a whole folder/ZIP to add multiple pages at once.
+
+Option B: Directly on GitHub
+
+· Navigate to docs/ folder in your repository.
+· Click "Add file" → "Create new file".
+· Name it docs/new-page.md, write your content, and commit.
+· Wait ~1 minute for the rebuild.
+
+---
+
+🎨 Customizing the Theme
+
+Want to tweak the colors or padding?
+
+1. Edit docs/stylesheets/extra.css directly on GitHub.
+2. Adjust the :root variables at the top for colors, or modify the .md-typeset padding sections for spacing.
+3. Commit and wait for the rebuild.
+
+---
+
+📱 Mobile Responsiveness
+
+The edge‑to‑edge design makes it perfect for mobile viewing. The sidebar collapses into a hamburger menu, and the text remains highly readable without unnecessary whitespace.
+
+---
+
+🧩 Built With
+
+· MkDocs – Static site generator for project documentation.
+· Material for MkDocs – The theme powering the look.
+· GitHub Pages – Hosting.
+· JSZip – Used in the editor for ZIP extraction.
+· GitHub API – Powers the in‑browser file uploads.
+
+---
+
+📄 License
+
+This project is open for personal and commercial use. Modify it freely to suit your documentation needs.
+
+---
+
+🙌 Acknowledgments
+
+Built entirely in the browser using the GitHub web interface – no desktop tools were used in the creation or maintenance of this site.
+
+---
+
+```
+
+---
+
+### ✅ Why this README works
+
+| Section | Purpose |
+| :--- | :--- |
+| **Live Site** | Immediate access to the final product. |
+| **Key Features** | Shows off the edge‑to‑edge design and the editor. |
+| **File Structure** | Explains where everything lives (good for your own reference). |
+| **Configuration** | Documents your exact `mkdocs.yml` setup. |
+| **Editor Guide** | Teaches anyone (including future you) how to use the complex editor. |
+| **Quick Content Guide** | Two ways to add pages – via editor or directly. |
+| **Customizing** | Shows how to tweak the CSS. |
+| **Responsive/Mobile** | Highlights why you removed the cards. |
+
+Commit this to your repo, and visitors will immediately understand what they're looking at and how to use it. 🚀
