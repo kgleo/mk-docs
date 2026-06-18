@@ -40,3 +40,7 @@ extra:
       link: https://github.com/kaunghtetminkght-prog
 
 copyright: '© 2026 KaungHtetMin'
+plugins:
+  - git-revision-date-localized:
+      enable_creation_date: true
+      type: datetime
