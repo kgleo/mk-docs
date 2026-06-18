@@ -37,7 +37,7 @@
         .token-section { background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
         .token-section input { width: 60%; }
 
-        #status, #navStatus, #editStatus { margin-top: 12px; padding: 12px; border-radius: 4px; background: #f0f2f5; }
+        .status-area { margin-top: 12px; padding: 12px; border-radius: 4px; background: #f0f2f5; }
         .success { color: #00875a; }
         .error { color: #de350b; }
 
@@ -49,6 +49,46 @@
         #loadingMsg .spinner { display: inline-block; animation: spin 1s linear infinite; font-size: 28px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         #loadingMsg .status-detail { font-size: 13px; color: #6b778c; margin-top: 8px; }
+
+        /* ----- CONNECTION LOG PANEL ----- */
+        #logPanel {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 10px 15px;
+            max-height: 220px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            margin-top: 20px;
+            border-radius: 6px;
+            border: 1px solid #333;
+        }
+        #logPanel .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #333;
+            padding-bottom: 6px;
+            margin-bottom: 8px;
+            color: #fff;
+            font-weight: 600;
+        }
+        #logPanel .log-header button {
+            background: #444;
+            color: #fff;
+            border: none;
+            padding: 2px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        #logPanel .log-header button:hover { background: #666; }
+        #logMessages { line-height: 1.6; }
+        #logMessages .log-time { color: #888; margin-right: 8px; }
+        .log-info { color: #64b5f6; }
+        .log-success { color: #4caf50; }
+        .log-error { color: #f44336; }
+        .log-warning { color: #ff9800; }
 
         @media (max-width: 768px) { .layout { flex-direction: column; } .panel-nav { min-width: unset; } }
     </style>
@@ -64,13 +104,15 @@
     <div class="status-detail" id="loadStatus">Initializing...</div>
 </div>
 
-<!-- MAIN UI (hidden until libraries load) -->
+<!-- MAIN UI -->
 <div id="mainUI" style="display:none;">
+
     <!-- TOKEN SECTION -->
     <div class="token-section">
         <label><strong>🔑 GitHub Token</strong> (needs <code>repo</code> scope):</label>
-        <input type="password" id="token" placeholder="Paste your token here..." style="width:70%;">
+        <input type="password" id="token" placeholder="Paste your token here..." style="width:60%;">
         <button onclick="saveToken()" class="outline" style="padding:8px 16px;">💾 Save</button>
+        <button onclick="checkConnection()" class="outline" style="background:#17a2b8;color:#fff;border-color:#17a2b8;">📶 Check Connection</button>
         <span id="tokenStatus" style="margin-left:10px;"></span>
         <br><small>Stored securely in your browser's localStorage.</small>
     </div>
@@ -100,18 +142,28 @@
             </div>
         </div>
     </div>
+
+    <!-- ===== CONNECTION LOG PANEL ===== -->
+    <div id="logPanel">
+        <div class="log-header">
+            <span>📋 Connection Log</span>
+            <button onclick="clearLog()">Clear</button>
+        </div>
+        <div id="logMessages">
+            <div><span class="log-time">[System]</span><span class="log-info">Ready. Click "Check Connection" to test GitHub API reachability.</span></div>
+        </div>
+    </div>
+
     <div id="status"></div>
 </div>
 
 <script>
     // ============================================================
     //  TRIPLE CDN FALLBACK LOADER
-    //  Tries: jsDelivr → unpkg → cdnjs
     // ============================================================
     function loadScript(sources) {
         return new Promise((resolve, reject) => {
             let currentIndex = 0;
-
             function tryLoad() {
                 if (currentIndex >= sources.length) {
                     reject(new Error(`Failed to load from all sources: ${sources.join(', ')}`));
@@ -120,10 +172,7 @@
                 const src = sources[currentIndex];
                 const script = document.createElement('script');
                 script.src = src;
-                script.onload = () => {
-                    console.log(`✅ Loaded: ${src}`);
-                    resolve();
-                };
+                script.onload = () => { console.log(`✅ Loaded: ${src}`); resolve(); };
                 script.onerror = () => {
                     console.warn(`⚠️ Failed to load ${src}, trying next fallback...`);
                     document.getElementById('loadStatus').innerHTML = `Trying fallback ${currentIndex + 2}...`;
@@ -163,87 +212,121 @@
                 ]
             }
         ];
-
         for (const dep of deps) {
             document.getElementById('loadStatus').innerHTML = `Loading ${dep.name}...`;
-            try {
-                await loadScript(dep.sources);
-            } catch (e) {
-                console.error(`❌ ${e.message}`);
-                throw e;
-            }
+            await loadScript(dep.sources);
         }
         document.getElementById('loadStatus').innerHTML = '✅ All libraries loaded!';
     }
 
     // ============================================================
-    //  INIT – Show UI only after libraries are ready
+    //  LOGGING SYSTEM (Shows all network activity)
     // ============================================================
-    window.onload = async function() {
-        const loadingEl = document.getElementById('loadingMsg');
-        try {
-            await loadAllDependencies();
-            // Hide loading, show main UI
-            loadingEl.style.display = 'none';
-            document.getElementById('mainUI').style.display = 'block';
+    function addLog(msg, type = 'info') {
+        const container = document.getElementById('logMessages');
+        const time = new Date().toLocaleTimeString();
+        const colorClass = type === 'info' ? 'log-info' : (type === 'success' ? 'log-success' : (type === 'error' ? 'log-error' : 'log-warning'));
+        container.innerHTML += `<div><span class="log-time">[${time}]</span><span class="${colorClass}">${msg}</span></div>`;
+        container.scrollTop = container.scrollHeight;
+    }
 
-            // Load token and auto-refresh
-            const savedToken = localStorage.getItem('github_token');
-            if (savedToken) {
-                document.getElementById('token').value = savedToken;
-                document.getElementById('tokenStatus').innerHTML = '✅ Loaded.';
-                setTimeout(loadNavigation, 300);
-            }
-        } catch (e) {
-            loadingEl.innerHTML = `
-                <p style="color:#de350b; font-size:18px;">❌ Failed to load required libraries.</p>
-                <p style="color:#6b778c;">Please check your network connection or try a different browser.</p>
-                <p style="color:#6b778c; font-size:13px;">All CDNs (jsDelivr, unpkg, cdnjs) appear to be blocked or unreachable.</p>
-                <p style="color:#6b778c; font-size:13px; word-break:break-all;">Error: ${e.message}</p>
-                <p style="margin-top:20px;">💡 Try using a VPN or contact your network admin to allow:<br>
-                <code style="background:#f0f2f5;padding:4px 8px;border-radius:4px;">cdn.jsdelivr.net</code>,
-                <code style="background:#f0f2f5;padding:4px 8px;border-radius:4px;">unpkg.com</code>,
-                <code style="background:#f0f2f5;padding:4px 8px;border-radius:4px;">cdnjs.cloudflare.com</code></p>
-            `;
-        }
-    };
+    function clearLog() {
+        document.getElementById('logMessages').innerHTML = '<div><span class="log-time">[System]</span><span class="log-info">Log cleared.</span></div>';
+    }
 
     // ============================================================
-    //  TOKEN MANAGEMENT
+    //  TOKEN & CONNECTION CHECK
     // ============================================================
     function saveToken() {
         const token = document.getElementById('token').value.trim();
         if (token) { localStorage.setItem('github_token', token);
-            document.getElementById('tokenStatus').innerHTML = '✅ Saved!'; }
-        else alert('Please enter a token.');
+            document.getElementById('tokenStatus').innerHTML = '✅ Saved!';
+            addLog('Token saved to localStorage.', 'success');
+        } else alert('Please enter a token.');
     }
 
     function getToken() {
         const t = document.getElementById('token').value.trim();
-        if (!t) alert('Please enter your GitHub token.');
+        if (!t) {
+            addLog('❌ No token provided. Please enter your GitHub token.', 'error');
+            alert('Please enter your GitHub token.');
+            return null;
+        }
         return t;
     }
 
+    async function checkConnection() {
+        addLog('🔍 Testing network connectivity...', 'info');
+
+        // Test 1: Basic internet / GitHub API reachability (no token)
+        try {
+            const resp = await fetch('https://api.github.com/zen');
+            addLog(`📡 GitHub API (zen) → Status: ${resp.status} ${resp.statusText}`, resp.ok ? 'success' : 'error');
+        } catch (e) {
+            addLog(`❌ GitHub API unreachable (DNS/Firewall): ${e.message}`, 'error');
+        }
+
+        // Test 2: Repo access with token
+        const token = document.getElementById('token').value.trim();
+        if (token) {
+            try {
+                const resp = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}`, {
+                    headers: { 'Authorization': `token ${token}` }
+                });
+                addLog(`📡 Repo Access → Status: ${resp.status} ${resp.statusText}`, resp.ok ? 'success' : 'error');
+                if (!resp.ok) {
+                    const txt = await resp.text();
+                    addLog(`❌ Token/Repo error: ${txt.substring(0, 150)}`, 'error');
+                } else {
+                    addLog(`✅ Repo "${REPO_OWNER}/${REPO_NAME}" is accessible.`, 'success');
+                }
+            } catch (e) {
+                addLog(`❌ Repo fetch failed: ${e.message}`, 'error');
+            }
+        } else {
+            addLog('⚠️ No token entered. Please paste your token and save it.', 'warning');
+        }
+        addLog('🏁 Connection test finished.', 'info');
+    }
+
     // ============================================================
-    //  GITHUB API HELPERS
+    //  GITHUB API HELPERS (with full logging)
     // ============================================================
     const REPO_OWNER = 'kaunghtetminkght-prog';
     const REPO_NAME = 'mk-docs';
 
     async function fetchFile(path, token) {
         const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${path}`;
-        const resp = await fetch(url, { headers: { 'Authorization': `token ${token}` } });
-        if (!resp.ok) {
-            if (resp.status === 404) return null;
-            throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+        addLog(`⏳ GET ${url}`, 'info');
+        try {
+            const resp = await fetch(url, { headers: { 'Authorization': `token ${token}` } });
+            addLog(`📡 Status: ${resp.status} ${resp.statusText}`, resp.ok ? 'success' : 'error');
+            if (!resp.ok) {
+                if (resp.status === 404) {
+                    addLog(`ℹ️ File not found (404): ${path}`, 'warning');
+                    return null;
+                }
+                const text = await resp.text();
+                const errMsg = `HTTP ${resp.status}: ${resp.statusText} - ${text.substring(0, 100)}`;
+                addLog(`❌ ${errMsg}`, 'error');
+                throw new Error(errMsg);
+            }
+            const data = await resp.json();
+            const content = atob(data.content);
+            addLog(`✅ Retrieved ${path} (${content.length} chars)`, 'success');
+            return { content, sha: data.sha };
+        } catch (e) {
+            if (e.message.includes('Failed to fetch')) {
+                addLog(`❌ NETWORK ERROR: Cannot reach GitHub API. Check CORS, VPN, or firewall. (${e.message})`, 'error');
+                throw new Error(`Network Error: Cannot connect to GitHub API. Are you online?`);
+            }
+            throw e;
         }
-        const data = await resp.json();
-        const content = atob(data.content);
-        return { content, sha: data.sha };
     }
 
     async function updateFile(path, content, token, sha = null) {
         const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${path}`;
+        addLog(`⏳ PUT ${url}`, 'info');
         const payload = {
             message: `Update ${path} via editor`,
             content: btoa(unescape(encodeURIComponent(content))),
@@ -251,30 +334,53 @@
         };
         if (sha) payload.sha = sha;
 
-        const resp = await fetch(url, {
-            method: 'PUT',
-            headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        if (!resp.ok) {
-            const err = await resp.json();
-            throw new Error(`HTTP ${resp.status}: ${err.message || resp.statusText}`);
+        try {
+            const resp = await fetch(url, {
+                method: 'PUT',
+                headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            addLog(`📡 Status: ${resp.status} ${resp.statusText}`, resp.ok ? 'success' : 'error');
+            if (!resp.ok) {
+                const err = await resp.json();
+                const errMsg = `HTTP ${resp.status}: ${err.message || resp.statusText}`;
+                addLog(`❌ ${errMsg}`, 'error');
+                throw new Error(errMsg);
+            }
+            addLog(`✅ Successfully updated ${path}`, 'success');
+            return await resp.json();
+        } catch (e) {
+            if (e.message.includes('Failed to fetch')) {
+                addLog(`❌ NETWORK ERROR: Cannot reach GitHub API. (${e.message})`, 'error');
+                throw new Error(`Network Error: Cannot connect to GitHub API. Are you online?`);
+            }
+            throw e;
         }
-        return await resp.json();
     }
 
     async function deleteFile(path, token, sha) {
         const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${path}`;
-        const resp = await fetch(url, {
-            method: 'DELETE',
-            headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: `Delete ${path}`, sha, branch: 'main' })
-        });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+        addLog(`⏳ DELETE ${url}`, 'info');
+        try {
+            const resp = await fetch(url, {
+                method: 'DELETE',
+                headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: `Delete ${path}`, sha, branch: 'main' })
+            });
+            addLog(`📡 Status: ${resp.status} ${resp.statusText}`, resp.ok ? 'success' : 'error');
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+            addLog(`✅ Deleted ${path}`, 'success');
+        } catch (e) {
+            if (e.message.includes('Failed to fetch')) {
+                addLog(`❌ NETWORK ERROR: Cannot reach GitHub API. (${e.message})`, 'error');
+                throw new Error(`Network Error: Cannot connect to GitHub API.`);
+            }
+            throw e;
+        }
     }
 
     // ============================================================
-    //  NAVIGATION PARSING
+    //  NAVIGATION PARSING & UI (rest of the logic)
     // ============================================================
     let navData = [];
     let selectedPath = null;
@@ -291,14 +397,8 @@
                 continue;
             }
             if (inNav) {
-                if (line.trim() === '' || line.trim().startsWith('#')) {
-                    navLines.push(line);
-                    continue;
-                }
-                if (line.trim() !== '' && !line.startsWith(' ') && !line.startsWith('\t')) {
-                    inNav = false;
-                    continue;
-                }
+                if (line.trim() === '' || line.trim().startsWith('#')) { navLines.push(line); continue; }
+                if (line.trim() !== '' && !line.startsWith(' ') && !line.startsWith('\t')) { inNav = false; continue; }
                 navLines.push(line);
             }
         }
@@ -308,7 +408,7 @@
             const parsed = jsyaml.load(navYaml);
             return parsed.nav || [];
         } catch (e) {
-            console.error('YAML parse error:', e);
+            addLog(`⚠️ YAML Parse Error: ${e.message}`, 'warning');
             return null;
         }
     }
@@ -318,6 +418,7 @@
         if (!token) return [];
         try {
             const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/docs`;
+            addLog(`⏳ Scanning docs/ folder...`, 'info');
             const resp = await fetch(url, { headers: { 'Authorization': `token ${token}` } });
             if (!resp.ok) return [];
             const files = await resp.json();
@@ -327,15 +428,16 @@
                 const name = f.name.replace('.md', '');
                 nav.push({ title: name.charAt(0).toUpperCase() + name.slice(1), path: f.name });
             }
+            addLog(`📂 Found ${nav.length} files in docs/`, 'success');
             return nav;
         } catch (e) {
-            console.error('Build nav from files error:', e);
+            addLog(`❌ Failed to scan docs/: ${e.message}`, 'error');
             return [];
         }
     }
 
     // ============================================================
-    //  RENDER TREE
+    //  RENDER TREE (unchanged from previous, but calls addLog)
     // ============================================================
     function renderTree(nav) {
         const container = document.getElementById('treeContainer');
@@ -343,26 +445,23 @@
             container.innerHTML = '<p style="color:#6b778c; text-align:center;">No pages found. Create your first page!</p>';
             return;
         }
-
         const list = document.createElement('ul');
         list.style.listStyle = 'none';
         list.style.padding = '0';
         list.style.margin = '0';
-
         for (const item of nav) {
             const li = createTreeItem(item);
             list.appendChild(li);
         }
-
         container.innerHTML = '';
         container.appendChild(list);
-
         Sortable.create(list, {
             handle: '.drag-handle',
             animation: 150,
             onEnd: function() {
                 rebuildNavFromDOM();
                 document.getElementById('navStatus').innerHTML = '⚠️ Unsaved changes. Click "Save Nav to GitHub".';
+                addLog('🔁 Navigation reordered via drag & drop.', 'info');
             }
         });
     }
@@ -371,37 +470,30 @@
         const li = document.createElement('li');
         li.style.margin = '2px 0';
         li.dataset.path = item.path || '';
-
         const div = document.createElement('div');
         div.className = 'tree-item' + (item.isGroup ? ' group' : '');
         div.draggable = false;
-
         const handle = document.createElement('span');
         handle.className = 'drag-handle';
         handle.textContent = '⠿';
         handle.style.marginRight = '8px';
         div.appendChild(handle);
-
         const icon = document.createElement('span');
         icon.className = 'icon';
         icon.textContent = item.isGroup ? '📁' : '📄';
         div.appendChild(icon);
-
         const name = document.createElement('span');
         name.className = 'name';
         name.textContent = item.title || (item.path ? item.path.replace('.md', '') : 'Untitled');
         div.appendChild(name);
-
         if (item.path) {
             const badge = document.createElement('span');
             badge.className = 'badge';
             badge.textContent = item.path;
             div.appendChild(badge);
         }
-
         const actions = document.createElement('span');
         actions.className = 'actions';
-
         if (!item.isGroup) {
             const editBtn = document.createElement('button');
             editBtn.textContent = '✏️';
@@ -409,22 +501,18 @@
             editBtn.onclick = (e) => { e.stopPropagation(); editPage(item.path); };
             actions.appendChild(editBtn);
         }
-
         const addBtn = document.createElement('button');
         addBtn.textContent = '➕';
         addBtn.title = item.isGroup ? 'Add page to this group' : 'Add page after this';
         addBtn.onclick = (e) => { e.stopPropagation(); addPageAfter(item); };
         actions.appendChild(addBtn);
-
         const delBtn = document.createElement('button');
         delBtn.textContent = '🗑️';
         delBtn.title = 'Delete this page';
         delBtn.style.color = '#de350b';
         delBtn.onclick = (e) => { e.stopPropagation(); deletePage(item); };
         actions.appendChild(delBtn);
-
         div.appendChild(actions);
-
         div.onclick = () => {
             if (item.path) editPage(item.path);
             else if (item.isGroup) {
@@ -432,9 +520,7 @@
                 if (childUl) childUl.style.display = childUl.style.display === 'none' ? 'block' : 'none';
             }
         };
-
         li.appendChild(div);
-
         if (item.children && item.children.length > 0) {
             const childUl = document.createElement('ul');
             childUl.style.listStyle = 'none';
@@ -448,7 +534,6 @@
             }
             li.appendChild(childUl);
         }
-
         return li;
     }
 
@@ -470,22 +555,11 @@
             const isGroup = div.classList.contains('group');
             const childUl = li.querySelector('ul');
             const children = childUl ? extractNavFromList(childUl) : [];
-
             if (isGroup) {
-                result.push({
-                    title: name,
-                    path: null,
-                    isGroup: true,
-                    children: children.length > 0 ? children : []
-                });
+                result.push({ title: name, path: null, isGroup: true, children: children.length > 0 ? children : [] });
             } else {
                 const path = badge || (name.toLowerCase().replace(/\s+/g, '-') + '.md');
-                result.push({
-                    title: name,
-                    path: path,
-                    isGroup: false,
-                    children: children.length > 0 ? children : []
-                });
+                result.push({ title: name, path: path, isGroup: false, children: children.length > 0 ? children : [] });
             }
         }
         return result;
@@ -501,6 +575,7 @@
         navData.push({ title: name, path: path, isGroup: false, children: [] });
         renderTree(navData);
         document.getElementById('navStatus').innerHTML = '⚠️ Unsaved changes. Click "Save Nav to GitHub".';
+        addLog(`➕ Added new page: ${name} -> ${path}`, 'info');
     }
 
     function addNewGroup() {
@@ -509,6 +584,7 @@
         navData.push({ title: name, path: null, isGroup: true, children: [] });
         renderTree(navData);
         document.getElementById('navStatus').innerHTML = '⚠️ Unsaved changes. Click "Save Nav to GitHub".';
+        addLog(`📁 Added new group: ${name}`, 'info');
     }
 
     function addPageAfter(item) {
@@ -516,23 +592,20 @@
         if (!name) return;
         const path = name.toLowerCase().replace(/\s+/g, '-') + '.md';
         const newPage = { title: name, path: path, isGroup: false, children: [] };
-
         const findAndInsert = (arr, target, newItem) => {
             for (let i = 0; i < arr.length; i++) {
                 if (arr[i].title === target.title && arr[i].path === target.path) {
                     arr.splice(i + 1, 0, newItem);
                     return true;
                 }
-                if (arr[i].children) {
-                    if (findAndInsert(arr[i].children, target, newItem)) return true;
-                }
+                if (arr[i].children) { if (findAndInsert(arr[i].children, target, newItem)) return true; }
             }
             return false;
         };
-
         if (!findAndInsert(navData, item, newPage)) navData.push(newPage);
         renderTree(navData);
         document.getElementById('navStatus').innerHTML = '⚠️ Unsaved changes. Click "Save Nav to GitHub".';
+        addLog(`➕ Added page after "${item.title}": ${name}`, 'info');
     }
 
     function deletePage(item) {
@@ -543,15 +616,14 @@
                     arr.splice(i, 1);
                     return true;
                 }
-                if (arr[i].children) {
-                    if (removeFrom(arr[i].children, target)) return true;
-                }
+                if (arr[i].children) { if (removeFrom(arr[i].children, target)) return true; }
             }
             return false;
         };
         removeFrom(navData, item);
         renderTree(navData);
         document.getElementById('navStatus').innerHTML = '⚠️ Unsaved changes. Click "Save Nav to GitHub".';
+        addLog(`🗑️ Removed "${item.title}" from navigation.`, 'warning');
     }
 
     // ============================================================
@@ -562,7 +634,6 @@
         if (!token) return;
         selectedPath = path;
         const container = document.getElementById('editorContent');
-
         try {
             const result = await fetchFile(`docs/${path}`, token);
             if (result) {
@@ -577,27 +648,27 @@
                 `;
                 currentFileSha = result.sha;
                 document.getElementById('editStatus').innerHTML = '';
+                addLog(`📄 Loaded page: ${path} for editing.`, 'info');
             } else {
                 container.innerHTML = `<p class="error">File not found: ${path}</p>`;
+                addLog(`❌ File not found: ${path}`, 'error');
             }
         } catch (e) {
             container.innerHTML = `<p class="error">Error loading: ${e.message}</p>`;
+            addLog(`❌ Error loading ${path}: ${e.message}`, 'error');
         }
     }
 
     async function saveEditedPage() {
         const token = getToken();
         if (!token || !selectedPath) return;
-
         const title = document.getElementById('editTitle').value.trim();
         const content = document.getElementById('editContent').value;
         const statusDiv = document.getElementById('editStatus');
-
         if (!title || !content) {
             statusDiv.innerHTML = '<span class="error">Title and content required.</span>';
             return;
         }
-
         const updateTitle = (arr, path, newTitle) => {
             for (const item of arr) {
                 if (item.path === path) { item.title = newTitle; return true; }
@@ -606,14 +677,15 @@
             return false;
         };
         updateTitle(navData, selectedPath, title);
-
         try {
             await updateFile(`docs/${selectedPath}`, content, token, currentFileSha);
             statusDiv.innerHTML = '<span class="success">✅ Page saved!</span>';
+            addLog(`💾 Saved page: ${selectedPath}`, 'success');
             await saveNavigation();
             renderTree(navData);
         } catch (e) {
             statusDiv.innerHTML = `<span class="error">❌ Error: ${e.message}</span>`;
+            addLog(`❌ Failed to save ${selectedPath}: ${e.message}`, 'error');
         }
     }
 
@@ -621,7 +693,6 @@
         if (!confirm(`Delete "${selectedPath}" permanently?`)) return;
         const token = getToken();
         if (!token || !selectedPath) return;
-
         try {
             await deleteFile(`docs/${selectedPath}`, token, currentFileSha);
             const removeFrom = (arr, path) => {
@@ -635,8 +706,10 @@
             await saveNavigation();
             renderTree(navData);
             document.getElementById('editorContent').innerHTML = '<p>✅ Deleted.</p>';
+            addLog(`🗑️ Deleted file: ${selectedPath}`, 'success');
         } catch (e) {
             alert('Error deleting: ' + e.message);
+            addLog(`❌ Delete failed: ${e.message}`, 'error');
         }
     }
 
@@ -646,21 +719,20 @@
     async function saveNavigation() {
         const token = getToken();
         if (!token) return;
-
         const statusDiv = document.getElementById('navStatus');
         statusDiv.innerHTML = '⏳ Saving navigation...';
-
+        addLog('⏳ Saving navigation to mkdocs.yml...', 'info');
         try {
             const navYaml = buildNavYaml(navData);
             const fullYaml = await getFullMkdocsYaml(navYaml, token);
-
             const current = await fetchFile('mkdocs.yml', token);
             const sha = current ? current.sha : null;
-
             await updateFile('mkdocs.yml', fullYaml, token, sha);
             statusDiv.innerHTML = '<span class="success">✅ Navigation saved! Rebuilding site...</span>';
+            addLog('✅ Navigation saved successfully to mkdocs.yml', 'success');
         } catch (e) {
             statusDiv.innerHTML = `<span class="error">❌ Error: ${e.message}</span>`;
+            addLog(`❌ Failed to save navigation: ${e.message}`, 'error');
         }
     }
 
@@ -684,12 +756,10 @@
     async function getFullMkdocsYaml(navYaml, token) {
         const current = await fetchFile('mkdocs.yml', token);
         let content = current ? current.content : '';
-
         const lines = content.split('\n');
         let inNav = false;
         let newLines = [];
         let foundNav = false;
-
         for (const line of lines) {
             if (!inNav && line.trim().startsWith('nav:')) {
                 inNav = true;
@@ -698,25 +768,17 @@
                 continue;
             }
             if (inNav) {
-                if (line.trim() === '' || line.startsWith(' ') || line.startsWith('\t')) {
-                    continue;
-                } else {
-                    inNav = false;
-                    newLines.push(line);
-                }
+                if (line.trim() === '' || line.startsWith(' ') || line.startsWith('\t')) { continue; }
+                else { inNav = false; newLines.push(line); }
             } else {
                 newLines.push(line);
             }
         }
-
         if (!foundNav) {
-            if (newLines.length > 0 && newLines[newLines.length - 1].trim() !== '') {
-                newLines.push('');
-            }
+            if (newLines.length > 0 && newLines[newLines.length - 1].trim() !== '') newLines.push('');
             newLines.push('nav:');
         }
         newLines.push(navYaml);
-
         return newLines.join('\n');
     }
 
@@ -726,33 +788,67 @@
     async function loadNavigation() {
         const token = getToken();
         if (!token) return;
-
         const statusDiv = document.getElementById('navStatus');
         statusDiv.innerHTML = '⏳ Loading...';
-
+        addLog('⏳ Loading mkdocs.yml...', 'info');
         try {
             const result = await fetchFile('mkdocs.yml', token);
             if (!result) {
                 statusDiv.innerHTML = '<span class="error">mkdocs.yml not found.</span>';
+                addLog('❌ mkdocs.yml not found in repo.', 'error');
                 return;
             }
-
             const parsed = parseNavYaml(result.content);
             if (parsed && parsed.length > 0) {
                 navData = parsed;
                 statusDiv.innerHTML = `<span class="success">✅ Loaded ${navData.length} items from nav.</span>`;
+                addLog(`✅ Loaded ${navData.length} items from navigation.`, 'success');
             } else {
                 statusDiv.innerHTML = '⚠️ No nav found, scanning docs/ folder...';
+                addLog('⚠️ No nav section found, scanning docs/ folder...', 'warning');
                 const files = await buildNavFromFiles();
                 navData = files;
                 statusDiv.innerHTML = `<span class="success">✅ Loaded ${navData.length} files from docs/.</span>`;
+                addLog(`✅ Loaded ${navData.length} files from docs/ folder.`, 'success');
             }
-
             renderTree(navData);
         } catch (e) {
             statusDiv.innerHTML = `<span class="error">❌ Error: ${e.message}</span>`;
+            addLog(`❌ Load failed: ${e.message}`, 'error');
         }
     }
+
+    // ============================================================
+    //  INIT
+    // ============================================================
+    window.onload = async function() {
+        const loadingEl = document.getElementById('loadingMsg');
+        try {
+            await loadAllDependencies();
+            loadingEl.style.display = 'none';
+            document.getElementById('mainUI').style.display = 'block';
+            addLog('🚀 Editor initialized. Enter your token and click "Check Connection".', 'info');
+            const savedToken = localStorage.getItem('github_token');
+            if (savedToken) {
+                document.getElementById('token').value = savedToken;
+                document.getElementById('tokenStatus').innerHTML = '✅ Loaded.';
+                addLog('🔑 Token loaded from localStorage. Auto-refreshing...', 'info');
+                setTimeout(loadNavigation, 300);
+            } else {
+                addLog('⚠️ No token found. Please paste your GitHub token.', 'warning');
+            }
+        } catch (e) {
+            loadingEl.innerHTML = `
+                <p style="color:#de350b; font-size:18px;">❌ Failed to load required libraries.</p>
+                <p style="color:#6b778c;">Please check your network connection or try a different browser.</p>
+                <p style="color:#6b778c; font-size:13px; word-break:break-all;">Error: ${e.message}</p>
+                <p style="margin-top:20px;">💡 Try using a VPN or contact your network admin to allow:<br>
+                <code style="background:#f0f2f5;padding:4px 8px;border-radius:4px;">cdn.jsdelivr.net</code>,
+                <code style="background:#f0f2f5;padding:4px 8px;border-radius:4px;">unpkg.com</code>,
+                <code style="background:#f0f2f5;padding:4px 8px;border-radius:4px;">cdnjs.cloudflare.com</code></p>
+            `;
+        }
+    };
 </script>
 </body>
 </html>
