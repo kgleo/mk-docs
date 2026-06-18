@@ -1,769 +1,159 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Docs Editor + Navigation Manager</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
-    <style>
-        * { box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 1400px; margin: 0 auto; padding: 20px; background: #f5f6f8; }
-        h1 { color: #172b4d; }
-        input, textarea, select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; width: 100%; margin: 4px 0; }
-        button { background: #0052cc; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; margin: 4px; }
-        button:hover { background: #0747a6; }
-        button.danger { background: #de350b; }
-        button.danger:hover { background: #b22222; }
-        button.success { background: #36b37e; }
-        button.success:hover { background: #00875a; }
-        button.outline { background: transparent; color: #172b4d; border: 1px solid #ddd; }
-        button.outline:hover { background: #e9ecf3; }
-
-        .layout { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
-        .panel { background: white; border-radius: 8px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); flex: 1; min-width: 300px; max-height: 80vh; overflow-y: auto; }
-        .panel-nav { flex: 1.5; min-width: 400px; }
-        .panel-editor { flex: 1; min-width: 300px; }
-
-        .tree-item { padding: 6px 12px; margin: 2px 0; border-radius: 4px; cursor: grab; display: flex; align-items: center; gap: 8px; border-left: 3px solid transparent; }
-        .tree-item:hover { background: #f0f2f5; }
-        .tree-item.dragging { opacity: 0.5; }
-        .tree-item .icon { font-size: 16px; }
-        .tree-item .name { flex: 1; font-size: 14px; color: #172b4d; }
-        .tree-item .badge { font-size: 11px; background: #e9ecf3; padding: 2px 8px; border-radius: 12px; color: #6b778c; }
-        .tree-item .actions { display: flex; gap: 4px; }
-        .tree-item .actions button { padding: 2px 8px; font-size: 12px; background: transparent; color: #6b778c; border: none; cursor: pointer; }
-        .tree-item .actions button:hover { background: #e9ecf3; border-radius: 4px; color: #172b4d; }
-        .tree-item.group { border-left-color: #0052cc; background: #f8f9fa; font-weight: 500; }
-        .tree-item .child-indent { margin-left: 24px; width: 100%; }
-        .tree-children { margin-left: 20px; border-left: 2px solid #e9ecf3; padding-left: 8px; }
-
-        .token-section { background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-        .token-section input { width: 60%; }
-
-        #status { margin-top: 12px; padding: 12px; border-radius: 4px; background: #f0f2f5; }
-        .success { color: #00875a; }
-        .error { color: #de350b; }
-
-        .editor-area textarea { height: 200px; font-family: 'Courier New', monospace; font-size: 13px; }
-        .editor-area input { margin: 4px 0; }
-
-        .drag-handle { cursor: grab; color: #6b778c; font-size: 14px; user-select: none; }
-
-        .quick-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
-
-        @media (max-width: 768px) { .layout { flex-direction: column; } .panel-nav { min-width: unset; } }
-    </style>
-</head>
-<body>
-
-<h1>📚 Docs Manager + Navigation</h1>
-
-<!-- ===== TOKEN SECTION ===== -->
-<div class="token-section">
-    <label><strong>🔑 GitHub Token</strong> (needs <code>repo</code> scope):</label>
-    <input type="password" id="token" placeholder="Paste your token here..." style="width:70%;">
-    <button onclick="saveToken()" class="outline" style="padding:8px 16px;">💾 Save</button>
-    <span id="tokenStatus" style="margin-left:10px;"></span>
-    <br><small>Stored securely in your browser's localStorage.</small>
-</div>
-
-<!-- ===== LAYOUT ===== -->
-<div class="layout">
-    <!-- LEFT: NAVIGATION TREE -->
-    <div class="panel panel-nav">
-        <h2>📖 Navigation Tree</h2>
-        <div class="quick-actions">
-            <button onclick="loadNavigation()" class="outline">🔄 Refresh</button>
-            <button onclick="addNewPage()" class="success">➕ New Page</button>
-            <button onclick="addNewGroup()" class="outline">📁 New Group</button>
-            <button onclick="saveNavigation()" style="background:#36b37e;">💾 Save Nav to GitHub</button>
-        </div>
-        <div id="treeContainer" style="margin-top:12px; min-height:200px; border: 1px dashed #ddd; padding: 12px; border-radius: 8px;">
-            <p style="color:#6b778c; text-align:center;">Load your navigation to see pages here.</p>
-        </div>
-        <div id="navStatus"></div>
-    </div>
-
-    <!-- RIGHT: PAGE EDITOR -->
-    <div class="panel panel-editor editor-area">
-        <h2>✏️ Page Editor</h2>
-        <div id="editorContent">
-            <p style="color:#6b778c;">Select a page from the tree to edit.</p>
-        </div>
-    </div>
-</div>
-
-<!-- ===== STATUS BAR ===== -->
-<div id="status"></div>
-
-<script>
-    // ============================================================
-    //  TOKEN MANAGEMENT
-    // ============================================================
-    const savedToken = localStorage.getItem('github_token');
-    if (savedToken) {
-        document.getElementById('token').value = savedToken;
-        document.getElementById('tokenStatus').innerHTML = '✅ Loaded.';
-    }
-
-    function saveToken() {
-        const token = document.getElementById('token').value.trim();
-        if (token) { localStorage.setItem('github_token', token);
-            document.getElementById('tokenStatus').innerHTML = '✅ Saved!'; }
-        else alert('Please enter a token.');
-    }
-
-    function getToken() {
-        const t = document.getElementById('token').value.trim();
-        if (!t) alert('Please enter your GitHub token.');
-        return t;
-    }
-
-    // ============================================================
-    //  GITHUB API HELPERS
-    // ============================================================
-    const REPO_OWNER = 'kaunghtetminkght-prog';
-    const REPO_NAME = 'mk-docs';
-
-    async function fetchFile(path, token) {
-        const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${path}`;
-        const resp = await fetch(url, { headers: { 'Authorization': `token ${token}` } });
-        if (!resp.ok) {
-            if (resp.status === 404) return null;
-            throw new Error(`HTTP ${resp.status}`);
-        }
-        const data = await resp.json();
-        const content = atob(data.content);
-        return { content, sha: data.sha };
-    }
-
-    async function updateFile(path, content, token, sha = null) {
-        const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${path}`;
-        const payload = {
-            message: `Update ${path} via editor`,
-            content: btoa(unescape(encodeURIComponent(content))),
-            branch: 'main'
-        };
-        if (sha) payload.sha = sha;
-
-        const resp = await fetch(url, {
-            method: 'PUT',
-            headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        if (!resp.ok) {
-            const err = await resp.json();
-            throw new Error(err.message || 'Update failed');
-        }
-        return await resp.json();
-    }
-
-    async function createFile(path, content, token) {
-        return await updateFile(path, content, token);
-    }
-
-    async function deleteFile(path, token, sha) {
-        const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${path}`;
-        const resp = await fetch(url, {
-            method: 'DELETE',
-            headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: `Delete ${path}`, sha, branch: 'main' })
-        });
-        if (!resp.ok) throw new Error('Delete failed');
-    }
-
-    // ============================================================
-    //  NAVIGATION PARSING & BUILDING
-    // ============================================================
-    let navData = [];       // Array of { title, path, children?, isGroup? }
-    let selectedPath = null;
-    let currentFileSha = null;
-
-    function parseNavYaml(yamlContent) {
-        // Find the nav: section
-        const lines = yamlContent.split('\n');
-        let inNav = false;
-        let navLines = [];
-        let indentStack = [];
-        let currentLevel = 0;
-
-        for (let line of lines) {
-            if (line.trim() === '' || line.trim().startsWith('#')) {
-                if (inNav) navLines.push(line);
-                continue;
-            }
-            if (!inNav && line.trim().startsWith('nav:')) {
-                inNav = true;
-                navLines.push(line);
-                continue;
-            }
-            if (inNav) {
-                // Check if we've exited nav (a non-indented line not starting with space or -)
-                const trimmed = line.trim();
-                if (trimmed && !line.startsWith(' ') && !line.startsWith('\t') && !trimmed.startsWith('#') && !trimmed.startsWith('-')) {
-                    inNav = false;
-                    continue;
-                }
-                navLines.push(line);
-            }
-        }
-
-        if (navLines.length === 0) {
-            // Try to build from file list
-            return buildNavFromFiles(yamlContent);
-        }
-
-        // Parse navLines into a tree
-        const navYaml = navLines.join('\n');
-        try {
-            const parsed = jsyaml.load(navYaml);
-            return parsed.nav || [];
-        } catch (e) {
-            return buildNavFromFiles(yamlContent);
-        }
-    }
-
-    // Simple JS-YAML implementation (minimal)
-    // Since we can't load a full YAML library easily, we'll use a simple recursive parser
-    function parseSimpleNav(lines, startIdx) {
-        const result = [];
-        let i = startIdx;
-        while (i < lines.length) {
-            const line = lines[i];
-            if (line.trim() === '' || line.trim().startsWith('#')) { i++; continue; }
-            const indent = line.search(/\S/);
-            if (indent === 0 && line.trim().startsWith('-')) {
-                // Top-level item
-                const item = parseNavItem(lines, i);
-                result.push(item.node);
-                i = item.nextIdx;
-            } else if (indent === 0 && line.trim() !== '' && !line.trim().startsWith('-')) {
-                // Not a nav item - end
-                break;
-            } else {
-                i++;
-            }
-        }
-        return { nodes: result, nextIdx: i };
-    }
-
-    function parseNavItem(lines, idx) {
-        const line = lines[idx].trim();
-        const isGroup = line.includes(':') && !line.includes('.md') && !line.includes('/');
-        let node = { title: '', path: null, children: [], isGroup: false };
-
-        if (isGroup) {
-            const parts = line.split(':');
-            node.title = parts[0].replace('-', '').trim();
-            node.isGroup = true;
-            node.path = null;
-            // Find children (indented)
-            const baseIndent = lines[idx].search(/\S/);
-            const children = [];
-            let i = idx + 1;
-            while (i < lines.length) {
-                const childLine = lines[i];
-                if (childLine.trim() === '' || childLine.trim().startsWith('#')) { i++; continue; }
-                const childIndent = childLine.search(/\S/);
-                if (childIndent <= baseIndent) break;
-                if (childLine.trim().startsWith('-')) {
-                    const childResult = parseNavItem(lines, i);
-                    children.push(childResult.node);
-                    i = childResult.nextIdx;
-                } else {
-                    i++;
-                }
-            }
-            node.children = children;
-            return { node, nextIdx: i };
-        } else {
-            // Simple page: - Title: path.md
-            const parts = line.replace('-', '').trim().split(':');
-            node.title = parts[0].trim();
-            node.path = parts.slice(1).join(':').trim();
-            node.isGroup = false;
-            return { node, nextIdx: idx + 1 };
-        }
-    }
-
-    // Fallback: build nav from files in docs/
-    async function buildNavFromFiles(yamlContent) {
-        const token = getToken();
-        if (!token) return [];
-        try {
-            const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/docs`;
-            const resp = await fetch(url, { headers: { 'Authorization': `token ${token}` } });
-            if (!resp.ok) return [];
-            const files = await resp.json();
-            const mdFiles = files.filter(f => f.name.endsWith('.md') && f.name !== 'index.md');
-            const nav = [{ title: 'Home', path: 'index.md' }];
-            for (const f of mdFiles) {
-                const name = f.name.replace('.md', '');
-                nav.push({ title: name.charAt(0).toUpperCase() + name.slice(1), path: f.name });
-            }
-            return nav;
-        } catch (e) { return []; }
-    }
-
-    // ============================================================
-    //  RENDER TREE
-    // ============================================================
-    function renderTree(nav) {
-        const container = document.getElementById('treeContainer');
-        if (!nav || nav.length === 0) {
-            container.innerHTML = '<p style="color:#6b778c; text-align:center;">No pages found. Create your first page!</p>';
-            return;
-        }
-
-        const list = document.createElement('ul');
-        list.style.listStyle = 'none';
-        list.style.padding = '0';
-        list.style.margin = '0';
-
-        for (const item of nav) {
-            const li = createTreeItem(item);
-            list.appendChild(li);
-        }
-
-        container.innerHTML = '';
-        container.appendChild(list);
-
-        // Enable Sortable
-        Sortable.create(list, {
-            handle: '.drag-handle',
-            animation: 150,
-            onEnd: function(evt) {
-                // Rebuild navData from DOM
-                rebuildNavFromDOM();
-            }
-        });
-    }
-
-    function createTreeItem(item, parent = null) {
-        const li = document.createElement('li');
-        li.style.margin = '2px 0';
-        li.dataset.path = item.path || '';
-
-        const div = document.createElement('div');
-        div.className = 'tree-item' + (item.isGroup ? ' group' : '');
-        div.draggable = false;
-
-        // Drag handle
-        const handle = document.createElement('span');
-        handle.className = 'drag-handle';
-        handle.textContent = '⠿';
-        handle.style.marginRight = '8px';
-        div.appendChild(handle);
-
-        // Icon
-        const icon = document.createElement('span');
-        icon.className = 'icon';
-        icon.textContent = item.isGroup ? '📁' : '📄';
-        div.appendChild(icon);
-
-        // Name
-        const name = document.createElement('span');
-        name.className = 'name';
-        name.textContent = item.title || (item.path ? item.path.replace('.md', '') : 'Untitled');
-        div.appendChild(name);
-
-        // Badge
-        if (item.path) {
-            const badge = document.createElement('span');
-            badge.className = 'badge';
-            badge.textContent = item.path;
-            div.appendChild(badge);
-        }
-
-        // Actions
-        const actions = document.createElement('span');
-        actions.className = 'actions';
-
-        if (!item.isGroup) {
-            const editBtn = document.createElement('button');
-            editBtn.textContent = '✏️';
-            editBtn.title = 'Edit this page';
-            editBtn.onclick = (e) => { e.stopPropagation(); editPage(item.path); };
-            actions.appendChild(editBtn);
-        }
-
-        const addBtn = document.createElement('button');
-        addBtn.textContent = '➕';
-        addBtn.title = item.isGroup ? 'Add page to this group' : 'Add page after this';
-        addBtn.onclick = (e) => { e.stopPropagation(); addPageAfter(item); };
-        actions.appendChild(addBtn);
-
-        const delBtn = document.createElement('button');
-        delBtn.textContent = '🗑️';
-        delBtn.title = 'Delete this page';
-        delBtn.style.color = '#de350b';
-        delBtn.onclick = (e) => { e.stopPropagation(); deletePage(item); };
-        actions.appendChild(delBtn);
-
-        div.appendChild(actions);
-
-        // Click to select/edit
-        div.onclick = () => {
-            if (item.path) editPage(item.path);
-            else if (item.isGroup) {
-                // Toggle children visibility
-                const childrenUl = li.querySelector('ul');
-                if (childrenUl) {
-                    childrenUl.style.display = childrenUl.style.display === 'none' ? 'block' : 'none';
-                }
-            }
-        };
-
-        li.appendChild(div);
-
-        // Children (for groups)
-        if (item.children && item.children.length > 0) {
-            const childUl = document.createElement('ul');
-            childUl.style.listStyle = 'none';
-            childUl.style.padding = '0';
-            childUl.style.marginLeft = '20px';
-            childUl.style.borderLeft = '2px solid #e9ecf3';
-            childUl.style.paddingLeft = '8px';
-            for (const child of item.children) {
-                const childLi = createTreeItem(child, item);
-                childUl.appendChild(childLi);
-            }
-            li.appendChild(childUl);
-        }
-
-        return li;
-    }
-
-    // ============================================================
-    //  NAVIGATION OPERATIONS
-    // ============================================================
-    function rebuildNavFromDOM() {
-        const container = document.getElementById('treeContainer');
-        const rootList = container.querySelector('ul');
-        if (!rootList) return;
-        navData = extractNavFromList(rootList);
-    }
-
-    function extractNavFromList(ul) {
-        const result = [];
-        const items = ul.children;
-        for (const li of items) {
-            const div = li.querySelector('.tree-item');
-            if (!div) continue;
-            const name = div.querySelector('.name')?.textContent || 'Untitled';
-            const badge = div.querySelector('.badge')?.textContent || '';
-            const isGroup = div.classList.contains('group');
-            const childUl = li.querySelector('ul');
-            const children = childUl ? extractNavFromList(childUl) : [];
-
-            if (isGroup) {
-                result.push({
-                    title: name,
-                    path: null,
-                    isGroup: true,
-                    children: children.length > 0 ? children : []
-                });
-            } else {
-                const path = badge || (name.toLowerCase().replace(/\s+/g, '-') + '.md');
-                result.push({
-                    title: name,
-                    path: path,
-                    isGroup: false,
-                    children: children.length > 0 ? children : []
-                });
-            }
-        }
-        return result;
-    }
-
-    function addNewPage() {
-        const name = prompt('Enter page title:');
-        if (!name) return;
-        const path = name.toLowerCase().replace(/\s+/g, '-') + '.md';
-        navData.push({ title: name, path: path, isGroup: false });
-        renderTree(navData);
-        document.getElementById('navStatus').innerHTML = '⚠️ Unsaved changes. Click "Save Nav to GitHub".';
-    }
-
-    function addNewGroup() {
-        const name = prompt('Enter group name:');
-        if (!name) return;
-        navData.push({ title: name, path: null, isGroup: true, children: [] });
-        renderTree(navData);
-        document.getElementById('navStatus').innerHTML = '⚠️ Unsaved changes. Click "Save Nav to GitHub".';
-    }
-
-    function addPageAfter(item) {
-        const name = prompt('Enter new page title:');
-        if (!name) return;
-        const path = name.toLowerCase().replace(/\s+/g, '-') + '.md';
-        const newPage = { title: name, path: path, isGroup: false };
-
-        // Find the index of the item in navData and insert after
-        const findAndInsert = (arr, target, newItem) => {
-            for (let i = 0; i < arr.length; i++) {
-                if (arr[i].title === target.title && arr[i].path === target.path) {
-                    arr.splice(i + 1, 0, newItem);
-                    return true;
-                }
-                if (arr[i].children) {
-                    if (findAndInsert(arr[i].children, target, newItem)) return true;
-                }
-            }
-            return false;
-        };
-
-        if (!findAndInsert(navData, item, newPage)) {
-            navData.push(newPage);
-        }
-        renderTree(navData);
-        document.getElementById('navStatus').innerHTML = '⚠️ Unsaved changes. Click "Save Nav to GitHub".';
-    }
-
-    function deletePage(item) {
-        if (!confirm(`Delete "${item.title}"? This removes it from navigation but does NOT delete the .md file.`)) return;
-        const removeFrom = (arr, target) => {
-            for (let i = 0; i < arr.length; i++) {
-                if (arr[i].title === target.title && arr[i].path === target.path) {
-                    arr.splice(i, 1);
-                    return true;
-                }
-                if (arr[i].children) {
-                    if (removeFrom(arr[i].children, target)) return true;
-                }
-            }
-            return false;
-        };
-        removeFrom(navData, item);
-        renderTree(navData);
-        document.getElementById('navStatus').innerHTML = '⚠️ Unsaved changes. Click "Save Nav to GitHub".';
-    }
-
-    // ============================================================
-    //  EDIT PAGE (Load content into editor)
-    // ============================================================
-    async function editPage(path) {
-        const token = getToken();
-        if (!token) return;
-        selectedPath = path;
-        const container = document.getElementById('editorContent');
-
-        try {
-            const result = await fetchFile(`docs/${path}`, token);
-            if (result) {
-                container.innerHTML = `
-                    <label><strong>File:</strong> ${path}</label>
-                    <input type="text" id="editTitle" value="${path.replace('.md', '')}" placeholder="Page title">
-                    <label>Content (Markdown):</label>
-                    <textarea id="editContent">${result.content}</textarea>
-                    <button onclick="saveEditedPage()" style="background:#36b37e;">💾 Save Page</button>
-                    <button onclick="deleteMD()" class="danger">🗑️ Delete .md File</button>
-                    <div id="editStatus"></div>
-                `;
-                currentFileSha = result.sha;
-                document.getElementById('editStatus').innerHTML = '';
-            } else {
-                container.innerHTML = `<p class="error">File not found: ${path}</p>`;
-            }
-        } catch (e) {
-            container.innerHTML = `<p class="error">Error loading: ${e.message}</p>`;
-        }
-    }
-
-    async function saveEditedPage() {
-        const token = getToken();
-        if (!token || !selectedPath) return;
-
-        const title = document.getElementById('editTitle').value.trim();
-        const content = document.getElementById('editContent').value;
-        const statusDiv = document.getElementById('editStatus');
-
-        if (!title || !content) {
-            statusDiv.innerHTML = '<span class="error">Title and content required.</span>';
-            return;
-        }
-
-        // Update the page title in navData if needed
-        const updateTitle = (arr, path, newTitle) => {
-            for (const item of arr) {
-                if (item.path === path) {
-                    item.title = newTitle;
-                    return true;
-                }
-                if (item.children) {
-                    if (updateTitle(item.children, path, newTitle)) return true;
-                }
-            }
-            return false;
-        };
-        updateTitle(navData, selectedPath, title);
-
-        try {
-            await updateFile(`docs/${selectedPath}`, content, token, currentFileSha);
-            statusDiv.innerHTML = '<span class="success">✅ Page saved! Rebuilding site...</span>';
-            // Also save nav changes
-            await saveNavigation();
-            renderTree(navData);
-        } catch (e) {
-            statusDiv.innerHTML = `<span class="error">❌ Error: ${e.message}</span>`;
-        }
-    }
-
-    async function deleteMD() {
-        if (!confirm(`Delete "${selectedPath}" permanently?`)) return;
-        const token = getToken();
-        if (!token || !selectedPath) return;
-
-        try {
-            await deleteFile(`docs/${selectedPath}`, token, currentFileSha);
-            // Remove from nav
-            const removeFrom = (arr, path) => {
-                for (let i = 0; i < arr.length; i++) {
-                    if (arr[i].path === path) {
-                        arr.splice(i, 1);
-                        return true;
-                    }
-                    if (arr[i].children) {
-                        if (removeFrom(arr[i].children, path)) return true;
-                    }
-                }
-                return false;
-            };
-            removeFrom(navData, selectedPath);
-            await saveNavigation();
-            renderTree(navData);
-            document.getElementById('editorContent').innerHTML = '<p>✅ Deleted. Refresh the tree.</p>';
-        } catch (e) {
-            alert('Error deleting: ' + e.message);
-        }
-    }
-
-    // ============================================================
-    //  SAVE NAVIGATION TO GITHUB
-    // ============================================================
-    async function saveNavigation() {
-        const token = getToken();
-        if (!token) return;
-
-        const statusDiv = document.getElementById('navStatus');
-        statusDiv.innerHTML = '⏳ Saving navigation...';
-
-        try {
-            // Build nav YAML from navData
-            const navYaml = buildNavYaml(navData);
-            const fullYaml = await getFullMkdocsYaml(navYaml);
-
-            // Fetch current mkdocs.yml to get SHA
-            const current = await fetchFile('mkdocs.yml', token);
-            const sha = current ? current.sha : null;
-
-            await updateFile('mkdocs.yml', fullYaml, token, sha);
-            statusDiv.innerHTML = '<span class="success">✅ Navigation saved! Rebuilding site...</span>';
-            document.getElementById('navStatus').innerHTML = '✅ Saved!';
-        } catch (e) {
-            statusDiv.innerHTML = `<span class="error">❌ Error: ${e.message}</span>`;
-        }
-    }
-
-    function buildNavYaml(nav, indent = 0) {
-        const spaces = '  '.repeat(indent);
-        let result = '';
-        for (const item of nav) {
-            if (item.isGroup) {
-                result += `${spaces}- ${item.title}:\n`;
-                if (item.children && item.children.length > 0) {
-                    result += buildNavYaml(item.children, indent + 1);
-                }
-            } else {
-                const path = item.path || (item.title.toLowerCase().replace(/\s+/g, '-') + '.md');
-                result += `${spaces}- ${item.title}: ${path}\n`;
-            }
-        }
-        return result;
-    }
-
-    async function getFullMkdocsYaml(navYaml) {
-        const token = getToken();
-        const current = await fetchFile('mkdocs.yml', token);
-        let content = current ? current.content : '';
-
-        // Replace or add nav section
-        const navRegex = /^nav:.*$/m;
-        if (navRegex.test(content)) {
-            // Replace existing nav
-            const lines = content.split('\n');
-            let inNav = false;
-            let newLines = [];
-            for (const line of lines) {
-                if (!inNav && line.trim() === '') { newLines.push(line); continue; }
-                if (!inNav && line.trim().startsWith('nav:')) {
-                    inNav = true;
-                    newLines.push('nav:');
-                    continue;
-                }
-                if (inNav) {
-                    if (line.trim() === '' || line.startsWith(' ')) continue;
-                    if (line.trim() !== '' && !line.startsWith(' ')) {
-                        inNav = false;
-                        newLines.push(line);
-                    }
-                } else {
-                    newLines.push(line);
-                }
-            }
-            // Add new nav
-            newLines.push('nav:');
-            newLines.push(navYaml);
-            return newLines.join('\n');
-        } else {
-            // Append nav at the end
-            return content + '\n\nnav:\n' + navYaml;
-        }
-    }
-
-    // ============================================================
-    //  LOAD NAVIGATION
-    // ============================================================
-    async function loadNavigation() {
-        const token = getToken();
-        if (!token) return;
-
-        const statusDiv = document.getElementById('navStatus');
-        statusDiv.innerHTML = '⏳ Loading...';
-
-        try {
-            const result = await fetchFile('mkdocs.yml', token);
-            if (!result) {
-                statusDiv.innerHTML = '<span class="error">mkdocs.yml not found.</span>';
-                return;
-            }
-
-            // Parse nav from YAML
-            const parsed = parseNavYaml(result.content);
-            if (parsed && parsed.length > 0) {
-                navData = parsed;
-            } else {
-                // Fallback: scan docs folder
-                const files = await buildNavFromFiles(result.content);
-                navData = files;
-            }
-
-            renderTree(navData);
-            statusDiv.innerHTML = `<span class="success">✅ Loaded ${navData.length} pages.</span>`;
-        } catch (e) {
-            statusDiv.innerHTML = `<span class="error">❌ Error: ${e.message}</span>`;
-        }
-    }
-
-    // ============================================================
-    //  INIT
-    // ============================================================
-    // Load automatically on page load
-    window.onload = function() {
-        if (savedToken) {
-            setTimeout(loadNavigation, 500);
-        }
-    };
-</script>
-</body>
-</html>
+/* ========================================
+   Edge-to-Edge Confluence Theme
+   No cards, no borders, full width.
+   ======================================== */
+
+:root {
+  --atlassian-bg: #f5f6f8;
+  --atlassian-white: #ffffff;
+  --atlassian-text: #172b4d;
+  --atlassian-blue: #0052cc;
+  --atlassian-border: #e9ecf3;
+}
+
+/* --- Header (Clean, white, subtle shadow) --- */
+.md-header {
+  background: var(--atlassian-white);
+  color: var(--atlassian-text);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid var(--atlassian-border);
+}
+.md-header__title {
+  color: var(--atlassian-text);
+  font-weight: 600;
+}
+.md-header__button.md-logo img,
+.md-header__button.md-logo svg {
+  fill: var(--atlassian-blue);
+}
+
+/* --- Left Sidebar (Page Tree) --- */
+.md-sidebar--primary .md-nav__title {
+  background: var(--atlassian-bg);
+  color: var(--atlassian-text);
+  font-weight: 600;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.md-sidebar--primary {
+  background: var(--atlassian-bg);
+  border-right: 1px solid var(--atlassian-border);
+}
+.md-nav__item--active > .md-nav__link {
+  background: #e9ecf3;
+  border-radius: 4px;
+  color: var(--atlassian-blue);
+  font-weight: 500;
+}
+.md-nav__link:hover {
+  background: #e9ecf3;
+  border-radius: 4px;
+}
+.md-nav__item .md-nav__link {
+  color: var(--atlassian-text);
+  font-size: 14px;
+  padding: 6px 12px;
+  margin: 2px 0;
+  border-radius: 4px;
+}
+
+/* --- ===== MAIN CONTENT: FULL WIDTH, EDGE-TO-EDGE ===== --- */
+
+/* 1. Remove max-width so content stretches 100% */
+.md-grid {
+  max-width: 100% !important;
+  padding: 0 !important;
+}
+
+/* 2. Remove the white card background, border, shadow, and internal padding */
+.md-content {
+  background: var(--atlassian-bg) !important;
+}
+.md-content__inner {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  margin: 0 !important;
+}
+
+/* 3. Add padding ONLY to the text so it's readable,
+      while the background stretches wall-to-wall */
+.md-typeset {
+  padding: 20px 16px 40px 16px !important;
+}
+
+/* On tablets and wider screens, add more side breathing room */
+@media (min-width: 768px) {
+  .md-typeset {
+    padding: 32px 48px 60px 48px !important;
+  }
+}
+@media (min-width: 1220px) {
+  .md-typeset {
+    padding: 40px 80px 80px 80px !important;
+  }
+}
+
+/* --- Typography (Clean and readable) --- */
+.md-typeset {
+  color: var(--atlassian-text);
+}
+.md-typeset h1 {
+  color: var(--atlassian-text);
+  font-weight: 600;
+  font-size: 28px;
+  border-bottom: 2px solid var(--atlassian-border);
+  padding-bottom: 12px;
+  margin-bottom: 24px;
+}
+.md-typeset h2 {
+  color: var(--atlassian-text);
+  font-weight: 500;
+  font-size: 22px;
+  margin-top: 32px;
+  border-bottom: 1px solid var(--atlassian-border);
+  padding-bottom: 6px;
+}
+.md-typeset h3 {
+  color: var(--atlassian-text);
+  font-weight: 500;
+  font-size: 18px;
+}
+.md-typeset a {
+  color: var(--atlassian-blue);
+}
+.md-typeset a:hover {
+  text-decoration: underline;
+}
+.md-typeset code {
+  background: #f0f2f5;
+  color: #172b4d;
+  border-radius: 3px;
+  padding: 2px 6px;
+}
+.md-typeset pre {
+  border: 1px solid var(--atlassian-border);
+  border-radius: 4px;
+  background: #fafbfc;
+}
+
+/* --- Hide the right Table of Contents (since we integrated it into the left sidebar with `toc.integrate`) --- */
+.md-sidebar--secondary {
+  display: none;
+}
+.md-sidebar--secondary .md-nav__title {
+  display: none;
+}
+
+/* --- Footer (Clean and minimal) --- */
+.md-footer {
+  background: var(--atlassian-white);
+  color: var(--atlassian-text);
+  border-top: 1px solid var(--atlassian-border);
+}
+.md-footer-meta {
+  background: var(--atlassian-bg);
+}
