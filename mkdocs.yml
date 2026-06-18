@@ -1,12 +1,12 @@
-site_name: My Space          # This acts like your Confluence "Space Name"
+site_name: My Space
 site_url: https://kaunghtetminkght-prog.github.io/mk-docs/
 
 theme:
   name: material
   palette:
     - scheme: default
-      primary: white         # Clean white header like Confluence
-      accent: blue           # Atlassian blue highlights
+      primary: white
+      accent: blue
       toggle:
         icon: material/weather-night
         name: Switch to dark mode
@@ -16,31 +16,33 @@ theme:
       toggle:
         icon: material/weather-sunny
         name: Switch to light mode
-
   font:
-    text: Inter              # Clean, modern font (similar to Confluence)
+    text: Inter
     code: JetBrains Mono
-
   features:
-    - navigation.sections    # Sidebar sections look like Confluence page tree
-    - navigation.expand      # Expands tree by default
-    - navigation.top         # Back to top button
-    - navigation.indexes     # Makes index.md pages clickable in sidebar
-    - toc.integrate          # ✅ Moves the Table of Contents to the LEFT sidebar (just like Confluence's page tree)
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.indexes
+    - toc.integrate
     - search.suggest
     - search.highlight
+    - navigation.footer   # 👈 PREVIOUS / NEXT BUTTONS
 
 extra_css:
-  - stylesheets/extra.css   # We will create this next
+  - stylesheets/extra.css
 
 extra:
-  generator: false           # Removes "Made with Material"
+  generator: false
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/kaunghtetminkght-prog
 
-copyright: '© 2026 KaungHtetMin'
-plugins:
-  - git-revision-date-localized:
-      enable_creation_date: true
-      type: datetime
+copyright: '© 2026 Your Name'
+
+# 👇 ADD THIS TO CONTROL THE ORDER OF YOUR PAGES
+nav:
+  - Home: index.md
+  # - About: about.md
+  # - Contact: contact.md
+  # Add your other pages here in the order you want them to appear.
