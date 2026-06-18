@@ -1,8 +1,7 @@
 /* ========================================
-   Confluence-like Theme for MkDocs Material
+   Edge-to-Edge Content (No Card/Border)
    ======================================== */
 
-/* --- Atlassian Color Palette --- */
 :root {
   --atlassian-bg: #f5f6f8;
   --atlassian-white: #ffffff;
@@ -11,7 +10,7 @@
   --atlassian-border: #e9ecf3;
 }
 
-/* --- Header (Confluence top bar) --- */
+/* --- Header (Clean, stays at the top) --- */
 .md-header {
   background: var(--atlassian-white);
   color: var(--atlassian-text);
@@ -27,7 +26,7 @@
   fill: var(--atlassian-blue);
 }
 
-/* --- Left Sidebar (Confluence Page Tree) --- */
+/* --- Left Sidebar (Stays intact) --- */
 .md-sidebar--primary .md-nav__title {
   background: var(--atlassian-bg);
   color: var(--atlassian-text);
@@ -41,7 +40,7 @@
   border-right: 1px solid var(--atlassian-border);
 }
 .md-nav__item--active > .md-nav__link {
-  background: #e9ecf3;  /* Light blue-gray highlight */
+  background: #e9ecf3;
   border-radius: 4px;
   color: var(--atlassian-blue);
   font-weight: 500;
@@ -58,23 +57,49 @@
   border-radius: 4px;
 }
 
-/* --- Main Content Area (White card) --- */
+/* --- ===== MAIN CONTENT: FULL WIDTH, EDGE-TO-EDGE ===== --- */
+
+/* 1. Remove the max-width so content stretches 100% */
+.md-grid {
+  max-width: 100% !important;
+  padding: 0 !important;
+}
+
+/* 2. Remove the background card, border, shadow, and padding */
 .md-content {
-  background: var(--atlassian-bg);
+  background: var(--atlassian-bg) !important; /* Matches the sidebar background */
 }
 .md-content__inner {
-  background: var(--atlassian-white);
-  border: 1px solid var(--atlassian-border);
-  border-radius: 4px;
-  padding: 40px 48px !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-  margin-top: 10px;
+  background: transparent !important;  /* No white card */
+  border: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  margin: 0 !important;
 }
+
+/* 3. Add padding ONLY to the text so it's readable,
+   but visually the background goes wall-to-wall */
+.md-typeset {
+  padding: 20px 16px 40px 16px !important;
+}
+
+/* On wider screens, add more side breathing room */
+@media (min-width: 768px) {
+  .md-typeset {
+    padding: 32px 48px 60px 48px !important;
+  }
+}
+@media (min-width: 1220px) {
+  .md-typeset {
+    padding: 40px 80px 80px 80px !important;
+  }
+}
+
+/* --- Typography (Stay clean and readable) --- */
 .md-typeset {
   color: var(--atlassian-text);
 }
-
-/* --- Headings (Confluence style) --- */
 .md-typeset h1 {
   color: var(--atlassian-text);
   font-weight: 600;
@@ -102,8 +127,6 @@
 .md-typeset a:hover {
   text-decoration: underline;
 }
-
-/* --- Code Blocks (Subtle) --- */
 .md-typeset code {
   background: #f0f2f5;
   color: #172b4d;
@@ -116,28 +139,15 @@
   background: #fafbfc;
 }
 
-/* --- Right Sidebar (TOC is moved left via feature, so this handles any remaining) --- */
+/* --- Hide right TOC (since we integrated it left) --- */
 .md-sidebar--secondary {
-  display: none; /* Optional: Hides the right TOC completely since we integrated it left */
+  display: none;
 }
 .md-sidebar--secondary .md-nav__title {
   display: none;
 }
 
-/* --- Breadcrumbs (Confluence shows "Home > Page") --- */
-.md-breadcrumb {
-  margin-bottom: 12px;
-  font-size: 13px;
-  color: #6b778c;
-}
-.md-breadcrumb a {
-  color: var(--atlassian-blue);
-}
-.md-breadcrumb a:hover {
-  text-decoration: underline;
-}
-
-/* --- Footer (Clean) --- */
+/* --- Footer (Stays clean) --- */
 .md-footer {
   background: var(--atlassian-white);
   color: var(--atlassian-text);
@@ -145,4 +155,4 @@
 }
 .md-footer-meta {
   background: var(--atlassian-bg);
-    }
+}
