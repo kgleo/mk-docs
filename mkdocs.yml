@@ -1,0 +1,4 @@
+site_name: My Documentation
+site_url: https://kaunghtetminkght-prog.github.io/mk-docs/
+theme:
+  name: material
